@@ -2,3 +2,4 @@ Documentation/
 testing/
 
 *.o
+*.txt
