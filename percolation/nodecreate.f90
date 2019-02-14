@@ -1,29 +1,38 @@
 program nodecreate
     implicit none
 
-
-    integer :: i, j, l, n, m, ns
+    integer :: i, j, l, n, m, ns, argcount
     character(len=32) :: arg1, arg2
 
     integer, allocatable :: bonds(:,:)
 
 
+    argcount = command_argument_count()
+    if (argcount /= 2) then
+        write(*,*) "This program requires 2 arguments to run"
+        stop
+    end if
+
+
     ! Get data from commandline arguments
+    
     call get_command_argument(1, arg1)
-    read(arg1,*) l
+    read(arg1,*) ns  ! Neighbouring sites
+    
+    if (.not. any((/4, 6, 3/) == ns)) then
+        write(*,*) "Error, number of bonds per site must be 3, 4 or 6"
+        stop
+    end if
+   
+
+    call get_command_argument(2, arg2)
+    read(arg2,*) l
 
     if (mod(l,2) /= 0) then
         write(*,*) "Error, need even number of sites"
         stop
     end if
     
-    call get_command_argument(2, arg2)
-    read(arg2,*) ns  ! Neighbouring sites
-    
-    if (.not. any((/4, 6, 3/) == l)) then
-        write(*,*) "Error, number of bonds per site must be 3, 4 or 6"
-        stop
-    end if
 
 
     ! Start of main program
@@ -72,10 +81,12 @@ program nodecreate
             end do
     end select
    
+    open(10, file="bonds.txt", status="replace", access="sequential", form="formatted", action="write")
+    write(10, *) ns, l, n, m
     do i = 0, m-1
-        print*, bonds(0,i), bonds(1,i)
+        write(10, *) bonds(0,i), bonds(1,i)
     end do
+    close(10)
 
     deallocate(bonds)
-
 end program nodecreate

@@ -12,7 +12,7 @@ FCOPTFLAGS =  -O3 -march=native
 debug: FCFLAGS += $(FCDEBUGFLAGS)
 debug: nodecreate.o
 
-optim: $(FCFLAGS) += $(FCOPTFLAGS)
+optim: FCFLAGS += $(FCOPTFLAGS)
 optim: nodecreate.o
 
 clean:
