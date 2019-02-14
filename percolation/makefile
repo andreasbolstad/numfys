@@ -10,10 +10,10 @@ FCOPTFLAGS =  -O3 -march=native
 .PHONY: debug, optim, clean
 
 debug: FCFLAGS += $(FCDEBUGFLAGS)
-debug: nodecreate.o
+debug: nodecreate.o percolate.o
 
 optim: FCFLAGS += $(FCOPTFLAGS)
-optim: nodecreate.o
+optim: nodecreate.o percolate.o
 
 clean:
 	rm -f nodecreate.o
@@ -21,3 +21,7 @@ clean:
 
 nodecreate.o: nodecreate.f90
 	$(FC) $(FCFLAGS) nodecreate.f90 -o nodecreate.o
+
+percolate.o: percolate.f90
+	$(FC) $(FCFLAGS) percolate.f90 -o percolate.o
+
