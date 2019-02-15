@@ -34,6 +34,7 @@ program percolate
     do i = 0, m-1
         read(10,*) bonds(0,i), bonds(1,i)
     end do
+    close(10)
 
     call random_seed(size=seed_size)
     allocate(seed(seed_size))
@@ -118,7 +119,8 @@ program percolate
     do i = 0, m
         write(11,*) p_inf_avg(i), p2_inf_avg(i), sm_avg(i)
     end do
-
+    
+    close(11)
 
     deallocate(bonds, seed, randnums, sites, p_inf, p2_inf, sm, p_inf_avg, p2_inf_avg, sm_avg)
 

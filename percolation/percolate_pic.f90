@@ -33,6 +33,7 @@ program percolate
     do i = 0, m-1
         read(10,*) bonds(0,i), bonds(1,i)
     end do
+    close(10)
 
     call random_seed(size=seed_size)
     allocate(seed(seed_size))
@@ -93,6 +94,8 @@ program percolate
             write(11,*) clustersites
         end if 
     end do
+
+    close(11)
 
     deallocate(bonds, seed, clustersites)
 
