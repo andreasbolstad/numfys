@@ -24,7 +24,7 @@ program percolate
     integer :: s1, s2, r1, r2, rsmall, rbig, rinf
 
     integer, allocatable :: clustersites(:)
-    integer :: capture_pcts(6) = (/30, 40, 48, 49, 50, 70/)
+    integer :: capture_pcts(6) = (/20, 40, 48, 50, 60, 80/)
     integer :: capture_nsites(6)
 
     open(10, file="bonds.txt", status="old", access="sequential", form="formatted", action="read")
@@ -49,7 +49,9 @@ program percolate
         temp0 = bonds(0,j)
         temp1 = bonds(1,j)
         bonds(0,j) = bonds(0, next)
-        bonds(0,j) = bonds(1, next)
+        bonds(1,j) = bonds(1, next)
+        bonds(0,next) = temp0
+        bonds(1,next) = temp1
     end do
 
     sites = -1
@@ -59,6 +61,7 @@ program percolate
     write(11,*) capture_pcts
     
     capture_nsites = capture_pcts * n / 100
+    print*, n, capture_nsites
 
     allocate(clustersites(0:n-1))
 

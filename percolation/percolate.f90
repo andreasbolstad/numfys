@@ -63,7 +63,9 @@ program percolate
             temp0 = bonds(0,j)
             temp1 = bonds(1,j)
             bonds(0,j) = bonds(0, next)
-            bonds(0,j) = bonds(1, next)
+            bonds(1,j) = bonds(1, next)
+            bonds(0,next) = temp0
+            bonds(1,next) = temp1 
         end do
 
         np_inf =  0
