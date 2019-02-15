@@ -24,8 +24,8 @@ program percolate
     integer :: s1, s2, r1, r2, rsmall, rbig, rinf
 
     integer, allocatable :: clustersites(:)
-    integer :: capture_pcts(6) = (/20, 40, 48, 50, 60, 80/)
-    integer :: capture_nsites(6)
+    integer :: capture_pcts(6) = (/20, 40, 48, 52, 60, 80/)
+    integer :: capture_mbonds(6)
 
     open(10, file="bonds.txt", status="old", access="sequential", form="formatted", action="read")
     read(10,*) ns, l, n, m
@@ -36,7 +36,7 @@ program percolate
 
     call random_seed(size=seed_size)
     allocate(seed(seed_size))
-    seed = 100
+    seed = 99
     call random_seed(put=seed)
 
     allocate(randnums(m-1))
@@ -60,8 +60,7 @@ program percolate
     write(11,*) ns, l, n, m
     write(11,*) capture_pcts
     
-    capture_nsites = capture_pcts * n / 100
-    print*, n, capture_nsites
+    capture_mbonds = capture_pcts * m / 100
 
     allocate(clustersites(0:n-1))
 
@@ -84,8 +83,7 @@ program percolate
                 rinf = rbig
             end if
         end if
-        if (any(capture_nsites == i)) then
-            print*, "Here"
+        if (any(capture_mbonds == i)) then
             clustersites = 0
             do j = 0, n-1
                 if (findroot(j,sites) == rinf) then
