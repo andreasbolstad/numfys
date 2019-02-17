@@ -3,7 +3,7 @@ program convolution
     
     integer, parameter :: wp = kind(1.d0)
 
-    integer, parameter :: nq = 1000
+    integer, parameter :: nq = 20000
 
     integer :: i, j, ns, l, n, m
     real(wp), allocatable :: lncr(:)
@@ -12,7 +12,7 @@ program convolution
     
     real(wp) :: logcoeff, coeff, q, pq, p2q, smq, chiq
 
-    character(len=32) :: lstr
+    character(len=32) :: lstr, nsstr
     character(len=100) :: filename
 
     
@@ -36,27 +36,32 @@ program convolution
     end do
 
     write(lstr,'(I0)') l
-    filename = "data/" // trim(lstr) // "x" // trim(lstr) // "convoluted.txt"
+    write(nsstr,'(I0)') ns
+    filename = "data/" // trim(lstr) // "x" // trim(lstr) // "t" // trim(nsstr) // ".txt"
     open(11, file=filename, status="replace", access="sequential", form="formatted", action="write")
     write(11,*) ns, l, n, m   
     
+    print '("Convoluting ", I0, "x", I0, " sites for ", I0, " probabilities")', l, l, nq
+
     do i = 1, nq-1
         q = real(i,wp) / real(nq, wp)
         pq = 0.0_wp
         p2q = 0.0_wp
         smq = 0.0_wp
         do j = 1, m-1
-            logcoeff = lncr(j) + j*log(q) + (m-j)*log(1-q)
-            if (logcoeff < -100.0_wp) then
-                coeff = 0.0000001_wp
-            else
-                coeff = exp(logcoeff)
-            end if
+            logcoeff = lncr(j) + j*log(q) + (m-j)*log(1.0_wp-q)
+            coeff = exp(logcoeff)
             pq = pq + coeff * p_inf(j)
             p2q = p2q + coeff * p2_inf(j)
             smq = smq + coeff * sm(j)
         end do
         chiq = n*sqrt(p2q - pq**2)
+        if (chiq /= chiq) then
+            chiq = 0.0_wp
+        end if
+        if (mod(i, 1000) == 0) then
+            print*, i
+        end if
         write(11, *) pq, smq, chiq 
     end do
 
