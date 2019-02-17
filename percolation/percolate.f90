@@ -55,6 +55,8 @@ program percolate
     sm(0) = 1.0_wp
     sm_avg(0) = 0.0_wp
 
+    print '("Start percolating ", I0, "x", I0, " sites with ", I0, " iterations")', l, l, niter
+
     do it = 1, niter 
 
         call random_number(randnums)
@@ -73,6 +75,7 @@ program percolate
         avg_s = n
         
         sites = -1
+        rinf = 1
 
         do i = 0, m-1
             s1 = bonds(0, i)
