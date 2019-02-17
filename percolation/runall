@@ -1,0 +1,8 @@
+#!/bin/bash
+
+for i in  100  130  166  216  278  360  464  600  774 1000
+do
+	./nodecreate.o 4 $i
+	./percolate.o
+	./convolution.o
+done
