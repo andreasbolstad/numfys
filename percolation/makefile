@@ -9,11 +9,11 @@ FCOPTFLAGS =  -O3 -march=native
 
 .PHONY: debug, optim, clean
 
-debug: FCFLAGS += $(FCDEBUGFLAGS)
-debug: nodecreate.o percolate.o percolate_pic.o convolution.o
-
 optim: FCFLAGS += $(FCOPTFLAGS)
 optim: nodecreate.o percolate.o percolate_pic.o convolution.o
+
+debug: FCFLAGS += $(FCDEBUGFLAGS)
+debug: nodecreate.o percolate.o percolate_pic.o convolution.o
 
 clean:
 	rm -f nodecreate.o percolate.o percolate_pic.o convolution.o
