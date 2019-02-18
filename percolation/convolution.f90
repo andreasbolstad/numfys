@@ -3,7 +3,7 @@ program convolution
     
     integer, parameter :: wp = kind(1.d0)
 
-    integer, parameter :: nq = 20000
+    integer, parameter :: nq = 10000
 
     integer :: i, j, ns, l, n, m
     real(wp), allocatable :: lncr(:)

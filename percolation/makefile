@@ -10,27 +10,27 @@ FCOPTFLAGS =  -O3 -march=native
 .PHONY: debug, optim, clean
 
 optim: FCFLAGS += $(FCOPTFLAGS)
-optim: nodecreate.o percolate.o percolate_pic.o convolution.o
+optim: nodecreate percolate percolate_pic convolution
 
 debug: FCFLAGS += $(FCDEBUGFLAGS)
-debug: nodecreate.o percolate.o percolate_pic.o convolution.o
+debug: nodecreate percolate percolate_pic convolution
 
 clean:
-	rm -f nodecreate.o percolate.o percolate_pic.o convolution.o
+	rm -f nodecreate percolate percolate_pic convolution
 	rm -f bonds.txt clusters.txt measurements.txt
 	rm -rf data
 
-nodecreate.o: nodecreate.f90
-	$(FC) $(FCFLAGS) nodecreate.f90 -o nodecreate.o
+nodecreate: nodecreate.f90
+	$(FC) $(FCFLAGS) nodecreate.f90 -o nodecreate
 
-percolate.o: percolate.f90
-	$(FC) $(FCFLAGS) percolate.f90 -o percolate.o
+percolate: percolate.f90
+	$(FC) $(FCFLAGS) percolate.f90 -o percolate
 
-percolate_pic.o: percolate_pic.f90
-	$(FC) $(FCFLAGS) percolate_pic.f90 -o percolate_pic.o
+percolate_pic: percolate_pic.f90
+	$(FC) $(FCFLAGS) percolate_pic.f90 -o percolate_pic
 
-convolution.o: convolution.f90
+convolution: convolution.f90
 	mkdir -p data
-	$(FC) $(FCFLAGS) convolution.f90 -o convolution.o
+	$(FC) $(FCFLAGS) convolution.f90 -o convolution
 
 
