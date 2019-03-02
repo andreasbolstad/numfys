@@ -68,7 +68,7 @@ print("Nu\t", 4/3, "\t", nu)
 #################
 # Plotting
 #################
-plot = False
+plot = True
 
 x = np.linspace(0, 1, nq)
 lowlim = 0

@@ -3,3 +3,9 @@ testing/
 
 *.o
 *.txt
+
+nodecreate
+percolate
+convolution
+percolate_pic
+runall*
