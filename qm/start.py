@@ -1,45 +1,86 @@
 import numpy as np
 from scipy.linalg import eigh_tridiagonal
-from scipy.integrate import simps
+from scipy.integrate import trapz
 import matplotlib.pyplot as plt
 
-N = 2000 
-NUM_EIGVALS = 100
 
-dx = 1.0/(N-1)
+def eigvalsvecs(N, NUM_EIGVALS):
+    dx = 1.0/(N-1)
 
-# Computing eigvals and vecs without the boundaries to avoid singular matrix. 
-d = 2 / dx**2 * np.ones(N-2) # Diagonal elements
-e = -1 / dx**2 * np.ones(N-3) # Next to diagonal elements (symmetric)
+    # Computing eigvals and vecs without the boundaries to avoid singular matrix. 
+    d = 2 / dx**2 * np.ones(N-2) # Diagonal elements
+    e = -1 / dx**2 * np.ones(N-3) # Next to diagonal elements (symmetric)
 
-yy = np.zeros((N,NUM_EIGVALS)) # Array of egeinvectors, 2nd axis specifies which eigenvalue is used
-# numpy.eigh_tridiagonal computes eigvals and eigvecs using a symmetric tridiagonal matrix
-la, yy[1:-1] = eigh_tridiagonal(d, e, select='i', select_range=(0,NUM_EIGVALS-1))
-yy *= dx**2
+    yy = np.zeros((N,NUM_EIGVALS)) # Array of egeinvectors, 2nd axis specifies which eigenvalue is used
+    # numpy.eigh_tridiagonal computes eigvals and eigvecs using a symmetric tridiagonal matrix
+    la, yy[1:-1] = eigh_tridiagonal(d, e, select='i', select_range=(0,NUM_EIGVALS-1))
 
-nlist = np.linspace(1, NUM_EIGVALS, NUM_EIGVALS, dtype=int) # All n's of different eigenvalues
-ala = (nlist*np.pi)**2 # Analytical lambdas (eigenvalues)
+    psi = yy.T # Transpose, more practical and efficient format in the following
+    for i in range(NUM_EIGVALS):
+        psi[i] = psi[i] / np.sqrt(trapz(np.square(psi[i]), dx=dx))
 
-plt.figure()
-plt.title(r'$\lambda_n(E_n) = \frac{E_n}{E_0},\ E_0 = \frac{\hbar^2}{2mL^2}$')
-plt.xlabel(r'n')
-plt.ylabel(r"$\lambda_n$")
-plt.plot(nlist, ala, label=r"$\lambda^{analytical}$")
-plt.plot(nlist, la, label=r"$\lambda^{numerical}$")
-plt.legend()
+    return la, psi 
 
-psi = yy.T
-for i in range(NUM_EIGVALS):
-    psi[i] = psi[i] / np.sqrt(simps(np.square(psi[i]), dx=dx))
 
-x = np.linspace(0, 1, N)
-ayy = np.empty((N,NUM_EIGVALS), dtype=float) 
-for n in range(1, NUM_EIGVALS):
-    ayy[:,n-1] = np.sqrt(2) * np.sin(n*np.pi*x)
+def lambda_plot():
+    N = 1000 # Number of points for discretization
+    NUM_EIGVALS = 100 # Number of eigenvalues to get
 
-plt.figure()
-for n in range(1):
-    plt.plot(x, psi[n])
-    plt.plot(x, ayy[:,n])
+    nlist = np.linspace(1, NUM_EIGVALS, NUM_EIGVALS, dtype=int) # All n's of different eigenvalues
+    ala = (nlist*np.pi)**2 # Analytical lambdas (eigenvalues)
+    la, _ = eigvalsvecs(N, NUM_EIGVALS)
 
-plt.show()
+    plt.figure()
+    plt.title(r'$\lambda_n(E_n) = \frac{E_n}{E_0},\ E_0 = \frac{\hbar^2}{2mL^2}$')
+    plt.xlabel(r'n')
+    plt.ylabel(r"$\lambda_n$")
+    plt.plot(nlist, ala, label=r"$\lambda^{analytical}$")
+    plt.plot(nlist, la, label=r"$\lambda^{numerical}$")
+    plt.legend()
+
+
+def wave_plot():
+    PLOT_RANGE = [1, 2, 3, 4, 5] # Choose n's to plot corresponding psi_n's
+
+    N = 100 # Number of points for discretization
+    NUM_EIGVALS = max(PLOT_RANGE) # Number of eigenvalues to get
+
+    _, psi = eigvalsvecs(N, NUM_EIGVALS)
+
+    x = np.linspace(0, 1, N)
+    apsi = np.empty((NUM_EIGVALS, N), dtype=float) 
+    for n in range(1, NUM_EIGVALS+1):
+        apsi[n-1] = np.sqrt(2) * np.sin(n*np.pi*x) * ((psi[n-1,1] > 0)*2-1)
+
+    for n in PLOT_RANGE:
+        i = n - 1
+        plt.figure()
+        plt.xlabel("x'")
+        plt.ylabel(r"$\psi$")
+        plt.plot(x, psi[i], label="numerical")
+        plt.plot(x, apsi[i], label="analytical")
+        plt.legend()
+
+
+def error_plot(n_eigval):
+    N_list = np.array(range(20, 201))
+    error = []
+    for N in N_list:
+        psi = eigvalsvecs(N, n_eigval)[1][n_eigval-1]
+        x = np.linspace(0, 1, N)
+        apsi = np.sqrt(2) * np.sin(n_eigval*np.pi*x) * ((psi[1] > 0)*2-1)
+        abs_err = np.abs(psi-apsi)
+        avg_err = np.sum(abs_err) / N 
+        error.append(avg_err)
+    plt.figure()
+    plt.plot(N_list, error)
+
+
+if __name__ == "__main__":
+    #lambda_plot()
+    #wave_plot()
+    error_plot(3)
+    plt.show()
+
+
+
