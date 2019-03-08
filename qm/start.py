@@ -3,6 +3,9 @@ from scipy.linalg import eigh_tridiagonal
 from scipy.integrate import trapz
 import matplotlib.pyplot as plt
 
+cmap = plt.get_cmap('viridis')
+
+np.set_printoptions(linewidth=200)
 
 def eigvalsvecs(N, NUM_EIGVALS):
     dx = 1.0/(N-1)
@@ -18,9 +21,12 @@ def eigvalsvecs(N, NUM_EIGVALS):
     psi = yy.T # Transpose, more practical and efficient format in the following
     for i in range(NUM_EIGVALS):
         psi[i] = psi[i] / np.sqrt(trapz(np.square(psi[i]), dx=dx))
-
+        if psi[i,1] < 0: # Invert y-coordinate if negative at x=0 (want sinx behavior, not -sinx)
+            psi[i] *= -1
     return la, psi 
 
+
+## 2.4
 
 def lambda_plot():
     N = 1000 # Number of points for discretization
@@ -50,15 +56,16 @@ def wave_plot():
     x = np.linspace(0, 1, N)
     apsi = np.empty((NUM_EIGVALS, N), dtype=float) 
     for n in range(1, NUM_EIGVALS+1):
-        apsi[n-1] = np.sqrt(2) * np.sin(n*np.pi*x) * ((psi[n-1,1] > 0)*2-1)
-
+        apsi[n-1] = np.sqrt(2) * np.sin(n*np.pi*x)
+    
+    plt.figure()
+    plt.xlabel("x'")
+    plt.ylabel(r"$\psi$")
     for n in PLOT_RANGE:
         i = n - 1
-        plt.figure()
-        plt.xlabel("x'")
-        plt.ylabel(r"$\psi$")
-        plt.plot(x, psi[i], label="numerical")
-        plt.plot(x, apsi[i], label="analytical")
+        color = cmap(float(i)/NUM_EIGVALS)
+        plt.plot(x, psi[i], marker="x", c=color)
+        plt.plot(x, apsi[i], label="E%s" % str(n), c=color)
         plt.legend()
 
 
@@ -68,7 +75,7 @@ def error_plot(n_eigval):
     for N in N_list:
         psi = eigvalsvecs(N, n_eigval)[1][n_eigval-1]
         x = np.linspace(0, 1, N)
-        apsi = np.sqrt(2) * np.sin(n_eigval*np.pi*x) * ((psi[1] > 0)*2-1)
+        apsi = np.sqrt(2) * np.sin(n_eigval*np.pi*x) 
         abs_err = np.abs(psi-apsi)
         avg_err = np.sum(abs_err) / N 
         error.append(avg_err)
@@ -76,10 +83,39 @@ def error_plot(n_eigval):
     plt.plot(N_list, error)
 
 
+
+#### 2.5
+def alpha_calculate(psi, Psi):
+    product = psi * Psi
+    dx = 1 / (psi.size - 1)
+    return trapz(product, dx=dx)
+
+
+def alpha_print_test():
+    # Prints a grid of all combinations of inner products, from n=1 to NUM_EIGVALS
+    N = 10
+    NUM_EIGVALS = 5
+    _, psi = eigvalsvecs(N, NUM_EIGVALS)
+    dx = 1/(N-1)
+    overlaps = np.zeros((NUM_EIGVALS, NUM_EIGVALS))
+    for i in range(NUM_EIGVALS):
+        for j in range(NUM_EIGVALS):
+            overlaps[i,j] = alpha_calculate(psi[i], psi[j])
+    print(overlaps)
+
+
 if __name__ == "__main__":
+    ## 2.4
     #lambda_plot()
     #wave_plot()
-    error_plot(3)
+    #error_plot(3)
+
+    ## 2.5
+    alpha_print_test()
+
+    ## 2.6
+    
+
     plt.show()
 
 
