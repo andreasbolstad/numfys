@@ -8,11 +8,22 @@ cmap = plt.get_cmap('viridis')
 
 np.set_printoptions(linewidth=400)
 
-def eigvalsvecs(N, NUM_EIGVALS):
+def eigvalsvecs(N, NUM_EIGVALS, V=0):
+    """
+    Hamiltonian can be represented as such:
+    --                                -- 
+    |   2+V   -1                       |    
+    |   -1    2+V   -1                 |    
+    |         -1     .    .            |         
+    |                .    .    .       |     
+    |                     .    .    .  |     
+    |                          .    .  |     
+    --                                --    
+    """
+    
     dx = 1.0/(N-1)
-
     # Computing eigvals and vecs without the boundaries to avoid singular matrix. 
-    d = 2 / dx**2 * np.ones(N-2) # Diagonal elements
+    d = (2 / dx**2) * np.ones(N-2) + V # Diagonal elements
     e = -1 / dx**2 * np.ones(N-3) # Next to diagonal elements (symmetric)
 
     psi = np.zeros((N,NUM_EIGVALS)) # Array of egeinvectors, 2nd axis specifies which eigenvalue is used
@@ -141,8 +152,9 @@ def init_cond_test(delta=False):
         Psi_components = coeffs * psi 
         Psi = np.sum(Psi_components, axis=1)
         Psi2 = Psi * np.conj(Psi)
+        Psi2 = Psi2.real # Discard imaginary zeros
         #print(r"Total probability =", trapz(Psi2, x=x))
-        line1.set_data(x, Psi)
+        line1.set_data(x, Psi.real)
         line2.set_data(x, Psi2) 
         return line1, line2,
     
@@ -154,17 +166,22 @@ def init_cond_test(delta=False):
     plt.show()
 
 
+
+#def animate_psi():
+    
+
+
 if __name__ == "__main__":
     ## 2.4
-    #lambda_plot()
-    #wave_plot()
-    #error_plot(3)
+    lambda_plot()
+    wave_plot()
+    error_plot(3)
 
     ## 2.5
-    #alpha_print_test()
+    alpha_print_test()
 
     ## 2.6
-    #init_cond_test()
+    init_cond_test()
     init_cond_test(delta=True)
 
 
