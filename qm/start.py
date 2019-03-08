@@ -2,10 +2,11 @@ import numpy as np
 from scipy.linalg import eigh_tridiagonal
 from scipy.integrate import trapz
 import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation 
 
 cmap = plt.get_cmap('viridis')
 
-np.set_printoptions(linewidth=200)
+np.set_printoptions(linewidth=400)
 
 def eigvalsvecs(N, NUM_EIGVALS):
     dx = 1.0/(N-1)
@@ -14,15 +15,14 @@ def eigvalsvecs(N, NUM_EIGVALS):
     d = 2 / dx**2 * np.ones(N-2) # Diagonal elements
     e = -1 / dx**2 * np.ones(N-3) # Next to diagonal elements (symmetric)
 
-    yy = np.zeros((N,NUM_EIGVALS)) # Array of egeinvectors, 2nd axis specifies which eigenvalue is used
+    psi = np.zeros((N,NUM_EIGVALS)) # Array of egeinvectors, 2nd axis specifies which eigenvalue is used
     # numpy.eigh_tridiagonal computes eigvals and eigvecs using a symmetric tridiagonal matrix
-    la, yy[1:-1] = eigh_tridiagonal(d, e, select='i', select_range=(0,NUM_EIGVALS-1))
+    la, psi[1:-1] = eigh_tridiagonal(d, e, select='i', select_range=(0,NUM_EIGVALS-1))
 
-    psi = yy.T # Transpose, more practical and efficient format in the following
     for i in range(NUM_EIGVALS):
-        psi[i] = psi[i] / np.sqrt(trapz(np.square(psi[i]), dx=dx))
-        if psi[i,1] < 0: # Invert y-coordinate if negative at x=0 (want sinx behavior, not -sinx)
-            psi[i] *= -1
+        psi[:,i] = psi[:,i] / np.sqrt(trapz(np.square(psi[:,i]), dx=dx))
+        if psi[1,i] < 0: # Invert y-coordinate if negative at x=0 (want sinx behavior, not -sinx)
+            psi[:,i] *= -1
     return la, psi 
 
 
@@ -43,6 +43,7 @@ def lambda_plot():
     plt.plot(nlist, ala, label=r"$\lambda^{analytical}$")
     plt.plot(nlist, la, label=r"$\lambda^{numerical}$")
     plt.legend()
+    plt.show()
 
 
 def wave_plot():
@@ -64,16 +65,17 @@ def wave_plot():
     for n in PLOT_RANGE:
         i = n - 1
         color = cmap(float(i)/NUM_EIGVALS)
-        plt.plot(x, psi[i], marker="x", c=color)
+        plt.plot(x, psi[:,i], marker="x", c=color)
         plt.plot(x, apsi[i], label="E%s" % str(n), c=color)
         plt.legend()
+    plt.show()
 
 
 def error_plot(n_eigval):
     N_list = np.array(range(20, 201))
     error = []
     for N in N_list:
-        psi = eigvalsvecs(N, n_eigval)[1][n_eigval-1]
+        psi = eigvalsvecs(N, n_eigval)[1][:, n_eigval-1]
         x = np.linspace(0, 1, N)
         apsi = np.sqrt(2) * np.sin(n_eigval*np.pi*x) 
         abs_err = np.abs(psi-apsi)
@@ -81,6 +83,7 @@ def error_plot(n_eigval):
         error.append(avg_err)
     plt.figure()
     plt.plot(N_list, error)
+    plt.show()
 
 
 
@@ -88,7 +91,7 @@ def error_plot(n_eigval):
 def alpha_calculate(psi, Psi):
     product = psi * Psi
     dx = 1 / (psi.size - 1)
-    return trapz(product, dx=dx)
+    return trapz(product, dx=dx) # alpha/coefficient
 
 
 def alpha_print_test():
@@ -100,8 +103,54 @@ def alpha_print_test():
     overlaps = np.zeros((NUM_EIGVALS, NUM_EIGVALS))
     for i in range(NUM_EIGVALS):
         for j in range(NUM_EIGVALS):
-            overlaps[i,j] = alpha_calculate(psi[i], psi[j])
+            overlaps[i,j] = alpha_calculate(psi[:,i], psi[:,j])
     print(overlaps)
+
+
+### 2.6
+def init_cond_test(delta=False):
+    N = 100
+    NUM_EIGVALS = 5
+    x = np.linspace(0, 1, N)
+
+    la, psi = eigvalsvecs(N, NUM_EIGVALS)
+    alphas = np.zeros(NUM_EIGVALS)
+    if delta:
+        alphas = psi[N//2, :]
+    else:
+        Psi0 = np.sqrt(2)*np.sin(np.pi * x)
+        for i in range(NUM_EIGVALS):
+            alphas[i] = alpha_calculate(psi[:,i], Psi0)
+
+
+    fig, ax = plt.subplots()
+    ax = plt.axes(xlim=(0,1), ylim=(-2,2))
+    line1, = ax.plot([], [])
+    line2, = ax.plot([], [])
+
+    def init():
+        ax.set_xlim(0, 1)
+        if delta:
+            ax.set_ylim(-50, 50)
+        else:
+            ax.set_ylim(-2, 2)
+        return line1, line2,
+
+    def update(t):
+        coeffs = alphas * np.exp(-1j*la*t)
+        Psi_components = coeffs * psi 
+        Psi = np.sum(Psi_components, axis=1)
+        Psi2 = Psi * np.conj(Psi)
+        line1.set_data(x, Psi)
+        line2.set_data(x, Psi2) 
+        return line1, line2,
+    
+    if delta:
+        nt = 50000
+    else:
+        nt = 1000
+    anim = FuncAnimation(fig, update, init_func=init, frames=np.linspace(0, 2*np.pi, nt), interval=20, blit=True)
+    plt.show()
 
 
 if __name__ == "__main__":
@@ -111,12 +160,11 @@ if __name__ == "__main__":
     #error_plot(3)
 
     ## 2.5
-    alpha_print_test()
+    #alpha_print_test()
 
     ## 2.6
-    
-
-    plt.show()
+    init_cond_test()
+    init_cond_test(delta=True)
 
 
 
