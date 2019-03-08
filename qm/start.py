@@ -109,14 +109,14 @@ def alpha_print_test():
 
 ### 2.6
 def init_cond_test(delta=False):
-    N = 100
-    NUM_EIGVALS = 5
+    N = 1000
+    NUM_EIGVALS = 100 
     x = np.linspace(0, 1, N)
 
     la, psi = eigvalsvecs(N, NUM_EIGVALS)
     alphas = np.zeros(NUM_EIGVALS)
     if delta:
-        alphas = psi[N//2, :]
+        alphas = psi[N//2, :]/np.sqrt(NUM_EIGVALS)
     else:
         Psi0 = np.sqrt(2)*np.sin(np.pi * x)
         for i in range(NUM_EIGVALS):
@@ -131,7 +131,7 @@ def init_cond_test(delta=False):
     def init():
         ax.set_xlim(0, 1)
         if delta:
-            ax.set_ylim(-50, 50)
+            ax.set_ylim(-20, 20)
         else:
             ax.set_ylim(-2, 2)
         return line1, line2,
@@ -141,15 +141,16 @@ def init_cond_test(delta=False):
         Psi_components = coeffs * psi 
         Psi = np.sum(Psi_components, axis=1)
         Psi2 = Psi * np.conj(Psi)
+        #print(r"Total probability =", trapz(Psi2, x=x))
         line1.set_data(x, Psi)
         line2.set_data(x, Psi2) 
         return line1, line2,
     
     if delta:
-        nt = 50000
+        nt = 5000000
     else:
-        nt = 1000
-    anim = FuncAnimation(fig, update, init_func=init, frames=np.linspace(0, 2*np.pi, nt), interval=20, blit=True)
+        nt = 2000
+    anim = FuncAnimation(fig, update, init_func=init, frames=np.linspace(0, 2*np.pi, nt), interval=40, blit=True)
     plt.show()
 
 
@@ -163,7 +164,7 @@ if __name__ == "__main__":
     #alpha_print_test()
 
     ## 2.6
-    init_cond_test()
+    #init_cond_test()
     init_cond_test(delta=True)
 
 
