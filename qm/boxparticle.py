@@ -17,7 +17,7 @@ class ParticleBox():
         self.NUM_EIGVALS = NUM_EIGVALS # Number of eigenvalues to get
         self.nlist = np.linspace(1, NUM_EIGVALS, NUM_EIGVALS, dtype=int) # All n's of different eigenvalues
     
-        if V:
+        if V is not None:
             self.V = V
         else:
             self.V = np.zeros(N)
@@ -66,15 +66,19 @@ class ParticleBox():
 
 
 
-def get_Psi(alphas, la, psi, t=0):
+def get_Psi(pb=None, alphas=None, la=None, psi=None, t=0):
+    if not alphas:
+        alphas = pb.alphas
+    if not la:
+        la = pb.la
+    if not psi:
+        psi = pb.psi
     coeffs = alphas * np.exp(-1j*la*t)
     Psi_components = coeffs * psi 
     return np.sum(Psi_components, axis=1)
 
 
 def animate(pb, alphas=None, xmin=0, xmax=1, ymin=-2, ymax=2, nt=2000):
-    if alphas is None:
-        alphas = pb.alphas
     fig, ax = plt.subplots()
     line1, = ax.plot([], [])
     line2, = ax.plot([], [])
@@ -85,7 +89,7 @@ def animate(pb, alphas=None, xmin=0, xmax=1, ymin=-2, ymax=2, nt=2000):
         return line1, line2
 
     def update(t):
-        Psi = get_Psi(alphas, pb.la, pb.psi, t=t)
+        Psi = get_Psi(pb=pb, alphas=alphas, t=t)
         Psi2 = Psi * np.conj(Psi)
         Psi2 = Psi2.real # Discard imaginary zeros
         #print(r"Total probability =", trapz(Psi2, x=x))
@@ -204,34 +208,32 @@ def psi0_delta_test():
 ###############
 
 def high_barrier():
-    N = 1000
-    NUM_EIGVALS = 5
-    x = np.linspace(0, 1, N)
+    N = 3000
+    NUM_EIGVALS = 300
 
     V = np.zeros(N)
-    V[N//3:2*N//3] = 10000
+    V[N//3:2*N//3] = 50
 
-    la, psi = eigvalsvecs(N, NUM_EIGVALS, V)
+    pb = ParticleBox(N=N, NUM_EIGVALS=NUM_EIGVALS, V=V)
     
-    plt.figure()
-    for n, p in enumerate(psi.T, start=1):
-        plt.plot(x, p, label=r"$\lambda_%s$" % str(n))
-    plt.legend()
-    plt.show()
-    
-    Psi0 = 1 / np.sqrt(2) * (psi[:, 0] + psi[:, 2]) 
 
-    alphas = np.zeros(NUM_EIGVALS)
-    for i in range(NUM_EIGVALS):
-        alphas[i] = alpha_calculate(psi[:,i], Psi0)
-    Psi1 = get_Psi(alphas, la, psi)
-    Psi2 = get_Psi(alphas, la, psi, t=np.pi/(la[2]-la[0]))
+    #plt.figure()
+    #for n, p in enumerate(pb.psi.T[0:4], start=1):
+    #    plt.plot(pb.x, p.real, label=r"$\lambda_%s$" % str(n))
+    #plt.legend()
+    #plt.show()
+   
+    pb.Psi0 = 1 / np.sqrt(2) * (pb.psi[:, 0] + pb.psi[:,1])  
+    animate(pb, ymin=-4, ymax=10, nt=300)
+
+    Psi1 = get_Psi(pb=pb, t=0)
+    Psi2 = get_Psi(pb=pb, t=np.pi/(pb.la[1]-pb.la[0]))
+
     plt.figure()
-    plt.plot(x, Psi1)
-    plt.figure()
-    plt.plot(x, Psi2)
+    plt.plot(pb.x, V/1000)
+    plt.plot(pb.x, np.absolute(Psi1)**2, label="t=0", color='b')
+    plt.plot(pb.x, np.absolute(Psi2)**2, label="t=pi/(l2-l1)")
     plt.show()
-    #wave_animate(x, alphas, la, psi)
 
 
 ###############
@@ -249,7 +251,7 @@ if __name__ == "__main__":
     ## 2.6
     #psi0_sine_test()
     #psi0_delta_test()
-    #high_barrier()
+    high_barrier()
 
 
 
