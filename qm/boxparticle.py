@@ -8,7 +8,7 @@ cmap = plt.get_cmap('viridis')
 
 np.set_printoptions(linewidth=400)
 
-def eigvalsvecs(N, NUM_EIGVALS, V=0):
+def eigvalsvecs(N, NUM_EIGVALS, V=None):
     """
     Hamiltonian can be represented as such:
     --                                -- 
@@ -20,11 +20,14 @@ def eigvalsvecs(N, NUM_EIGVALS, V=0):
     |                          .    .  |     
     --                                --    
     """
-    
+   
+    if not V:
+        V = np.zeros(N)
+
     dx = 1.0/(N-1)
     # Computing eigvals and vecs without the boundaries to avoid singular matrix. 
-    d = (2 / dx**2) * np.ones(N-2) + V # Diagonal elements
-    e = -1 / dx**2 * np.ones(N-3) # Next to diagonal elements (symmetric)
+    d = (2 / dx**2) * np.ones(N-2) + V[1:-1] # Diagonal elements
+    e = -1 / dx**2 * np.ones(N-3) + V[2:-1] # Next to diagonal elements (symmetric)
 
     psi = np.zeros((N,NUM_EIGVALS)) # Array of egeinvectors, 2nd axis specifies which eigenvalue is used
     # numpy.eigh_tridiagonal computes eigvals and eigvecs using a symmetric tridiagonal matrix
@@ -119,38 +122,31 @@ def alpha_print_test():
 
 
 ### 2.6
-def init_cond_test(delta=False):
-    N = 1000
-    NUM_EIGVALS = 100 
-    x = np.linspace(0, 1, N)
-
-    la, psi = eigvalsvecs(N, NUM_EIGVALS)
-    alphas = np.zeros(NUM_EIGVALS)
-    if delta:
-        alphas = psi[N//2, :]/np.sqrt(NUM_EIGVALS)
-    else:
-        Psi0 = np.sqrt(2)*np.sin(np.pi * x)
-        for i in range(NUM_EIGVALS):
-            alphas[i] = alpha_calculate(psi[:,i], Psi0)
+def get_Psi(alphas, la, psi, t=0):
+    coeffs = alphas * np.exp(-1j*la*t)
+    print(coeffs)
+    Psi_components = coeffs * psi 
+    return np.sum(Psi_components, axis=1)
 
 
+def wave_animate(x, alphas, la, psi, **kwargs):
     fig, ax = plt.subplots()
     ax = plt.axes(xlim=(0,1), ylim=(-2,2))
     line1, = ax.plot([], [])
     line2, = ax.plot([], [])
+    
+    startshape = kwargs.get('startshape')
 
     def init():
         ax.set_xlim(0, 1)
-        if delta:
+        if startshape == 'delta':
             ax.set_ylim(-20, 20)
         else:
             ax.set_ylim(-2, 2)
         return line1, line2,
 
     def update(t):
-        coeffs = alphas * np.exp(-1j*la*t)
-        Psi_components = coeffs * psi 
-        Psi = np.sum(Psi_components, axis=1)
+        Psi = get_Psi(alphas, la, psi, t=t)
         Psi2 = Psi * np.conj(Psi)
         Psi2 = Psi2.real # Discard imaginary zeros
         #print(r"Total probability =", trapz(Psi2, x=x))
@@ -158,7 +154,7 @@ def init_cond_test(delta=False):
         line2.set_data(x, Psi2) 
         return line1, line2,
     
-    if delta:
+    if startshape == 'delta':
         nt = 5000000
     else:
         nt = 2000
@@ -166,23 +162,70 @@ def init_cond_test(delta=False):
     plt.show()
 
 
+def init_cond_test(delta=False):
+    N = 1000
+    NUM_EIGVALS = 100 
+    x = np.linspace(0, 1, N)
 
-#def animate_psi():
+    la, psi = eigvalsvecs(N, NUM_EIGVALS)
+    if delta:
+        alphas = psi[N//2, :]/np.sqrt(NUM_EIGVALS)
+        wave_animate(x, alphas, la, psi, startshape='delta')
+    else:
+        alphas = np.zeros(NUM_EIGVALS)
+        Psi0 = np.sqrt(2)*np.sin(np.pi * x)
+        for i in range(NUM_EIGVALS):
+            alphas[i] = alpha_calculate(psi[:,i], Psi0)
+        wave_animate(x, alphas, la, psi)
+
+
+###############
+### TASK 3 ####
+###############
+
+def high_barrier():
+    N = 1000
+    NUM_EIGVALS = 5
+    x = np.linspace(0, 1, N)
+
+    V = np.zeros(N)
+    V[N//3:2*N//3] = 10000
+
+    la, psi = eigvalsvecs(N, NUM_EIGVALS, V)
     
+    plt.figure()
+    for n, p in enumerate(psi.T, start=1):
+        plt.plot(x, p, label=r"$\lambda_%s$" % str(n))
+    plt.legend()
+    plt.show()
+    
+    Psi0 = 1 / np.sqrt(2) * (psi[:, 0] + psi[:, 2]) 
 
+    alphas = np.zeros(NUM_EIGVALS)
+    for i in range(NUM_EIGVALS):
+        alphas[i] = alpha_calculate(psi[:,i], Psi0)
+    Psi1 = get_Psi(alphas, la, psi)
+    Psi2 = get_Psi(alphas, la, psi, t=np.pi/(la[2]-la[0]))
+    plt.figure()
+    plt.plot(x, Psi1)
+    plt.figure()
+    plt.plot(x, Psi2)
+    plt.show()
+    #wave_animate(x, alphas, la, psi)
 
 if __name__ == "__main__":
     ## 2.4
-    lambda_plot()
-    wave_plot()
+    #lambda_plot()
+    #wave_plot()
     error_plot(3)
 
     ## 2.5
-    alpha_print_test()
+    #alpha_print_test()
 
     ## 2.6
-    init_cond_test()
-    init_cond_test(delta=True)
+    #init_cond_test()
+    #init_cond_test(delta=True)
+    #high_barrier()
 
 
 
