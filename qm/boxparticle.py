@@ -4,13 +4,13 @@ from scipy.linalg import eigh_tridiagonal
 from scipy.integrate import trapz
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation 
+from scipy.optimize import brentq
 
 cmap = plt.get_cmap('viridis')
 
 np.set_printoptions(linewidth=400)
 
-
-class ParticleBox():
+class ParticleBox():                
 
     def __init__(self, N=1000, NUM_EIGVALS=100, V=None, Psi0=None):
         self.N = N # Number of points for discretization
@@ -31,7 +31,7 @@ class ParticleBox():
 
     def set_eigvalsvecs(self):
         """
-        Hamiltonian can be represented as such:
+        Hamiltonian can be represented similar to:
         --                                -- 
         |   2+V   -1                       |    
         |   -1    2+V   -1                 |    
@@ -66,10 +66,8 @@ class ParticleBox():
 
 
 
-def get_Psi(pb=None, t=0, **kwargs):
-    if 'alphas' in kwargs:
-        alphas = kwargs.get('alphas')
-    else:
+def get_Psi(pb, alphas=None, t=0):
+    if not type(alphas) is np.ndarray:
         alphas = pb.alphas
     coeffs = alphas * np.exp(-1j*pb.la*t)
     Psi_components = coeffs * pb.psi 
@@ -86,14 +84,14 @@ def animate(pb, alphas=None, xmin=0, xmax=1, ymin=-2, ymax=2, nt=1000, tmax=2*np
         return line1, 
 
     def update(t):
-        Psi = get_Psi(pb=pb, alphas=alphas, t=t)
-        Psi2 = Psi * np.conj(Psi)
+        Psi = get_Psi(pb, alphas=alphas, t=t)
+        Psi2 = np.absolute(Psi)**2
         Psi2 = Psi2.real # Discard imaginary zeros
         #print(r"Total probability =", trapz(Psi2, x=x))
         line1.set_data(pb.x, Psi2) 
         return line1,
 
-    baseAnimation = FuncAnimation(fig, update, init_func=anim_init, 
+    _ = FuncAnimation(fig, update, init_func=anim_init, 
             frames=np.linspace(0, tmax, nt), interval=40, blit=True)
     plt.show()
 
@@ -203,8 +201,9 @@ def psi0_delta_test():
 ### TASK 3 ####
 ###############
 
+## 3.1
 def high_barrier():
-    N = 90000 
+    N = 900 # Must be a multiple of 3!!!
     NUM_EIGVALS = 10 
 
     V = np.zeros(N)
@@ -212,17 +211,17 @@ def high_barrier():
 
     pb = ParticleBox(N=N, NUM_EIGVALS=NUM_EIGVALS, V=V)
     
-    #plt.figure()
-    #for n, p in enumerate(pb.psi.T[0:2], start=1):
-    #    plt.plot(pb.x, p.real, label=r"$\lambda_%s$" % str(n))
-    #plt.legend()
-    #plt.show()
+    plt.figure()
+    for n, p in enumerate(pb.psi.T[0:2], start=1):
+        plt.plot(pb.x, p.real, label=r"$\lambda_%s$" % str(n))
+    plt.legend()
+    plt.show()
    
     pb.Psi0 = 1 / np.sqrt(2) * (pb.psi[:, 0] + pb.psi[:,1])  
-    animate(pb, ymin=-4, ymax=10, tmax=10)
+    animate(pb, ymin=-4, ymax=10, tmax=10*np.pi/(pb.la[1]-pb.la[0]))
 
-    Psi1 = get_Psi(pb=pb, t=0)
-    Psi2 = get_Psi(pb=pb, t=np.pi/(pb.la[1]-pb.la[0]))
+    Psi1 = get_Psi(pb, t=0)
+    Psi2 = get_Psi(pb, t=np.pi/(pb.la[1]-pb.la[0]))
 
     print(pb.la[:10])
     
@@ -234,6 +233,27 @@ def high_barrier():
     plt.plot(pb.x, V/max(V))
     plt.plot(pb.x, np.absolute(Psi2)**2, label="t=pi/(l2-l1)")
     plt.show()
+
+
+## 3.2
+def root_finding():
+    N = 100000
+
+    v0 = 1000
+    ala = np.linspace(1, v0-1, N)
+    
+    k = np.sqrt(ala)
+    K = np.sqrt(v0 - ala)
+    Ksin = K * np.sin(k/3)
+    kcos = k * np.cos(k/3)
+    
+    f = np.exp(K/3) * np.square(Ksin + kcos) - np.exp(-K/3) * np.square(Ksin - kcos)
+
+    plt.figure()
+    plt.plot(ala, f)
+    #plt.show()
+
+
 
 
 ###############
@@ -250,8 +270,11 @@ if __name__ == "__main__":
 
     ## 2.6
     #psi0_sine_test()
-    psi0_delta_test()
-    #high_barrier()
+    #psi0_delta_test()
 
-
+    ## 3.1
+    # high_barrier()
+    
+    ## 3.2
+    root_finding()
 
