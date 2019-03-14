@@ -4,13 +4,21 @@ from scipy.linalg import eigh_tridiagonal
 from scipy.integrate import trapz
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation 
-from scipy.optimize import brentq
+from scipy.optimize import brentq, minimize_scalar
+from scipy.signal import find_peaks
 
 cmap = plt.get_cmap('viridis')
 
 np.set_printoptions(linewidth=400)
 
-class ParticleBox():                
+class ParticleBox():               
+    """
+    Class for particle boxes, convenient for storing all relevant variables.
+    
+    Member variables:
+    N, NUM_EIGVALS, V, Psi0, nlist, x, dx, la, psi, Psi0, alphas
+    """
+
 
     def __init__(self, N=1000, NUM_EIGVALS=100, V=None, Psi0=None):
         self.N = N # Number of points for discretization
@@ -56,7 +64,7 @@ class ParticleBox():
         return la, psi 
 
 
-    @property
+    @property # Call as a variable instead of function, i.e. obj.a instead of obj.a()
     def alphas(self):
         product = self.psi.T * self.Psi0 
         alphas = np.zeros(self.NUM_EIGVALS)
@@ -67,6 +75,10 @@ class ParticleBox():
 
 
 def get_Psi(pb, alphas=None, t=0):
+    """
+    Calculate Psi at a particular time t
+    If the argument alphas is given, use these values instead of alphas from pb (the particleBox instance)
+    """
     if not type(alphas) is np.ndarray:
         alphas = pb.alphas
     coeffs = alphas * np.exp(-1j*pb.la*t)
@@ -75,6 +87,9 @@ def get_Psi(pb, alphas=None, t=0):
 
 
 def animate(pb, alphas=None, xmin=0, xmax=1, ymin=-2, ymax=2, nt=1000, tmax=2*np.pi):
+    """
+    Animates the probability distribution evolution of the wavefunction of pb (ParticleBox object)
+    """
     fig, ax = plt.subplots()
     line1, = ax.plot([], [])
 
@@ -93,13 +108,17 @@ def animate(pb, alphas=None, xmin=0, xmax=1, ymin=-2, ymax=2, nt=1000, tmax=2*np
 
     _ = FuncAnimation(fig, update, init_func=anim_init, 
             frames=np.linspace(0, tmax, nt), interval=40, blit=True)
-    plt.show()
 
 
 
 ## 2.4
 
 def lambda_plot():
+    """
+    Plots the eigenvalues/lambdas as a function of n
+    1st plot: Numerical and analytical version
+    2nd plot: Error (i.e. difference between the numerical and analytical version)
+    """
     pb = ParticleBox()
 
     ala = (pb.nlist*np.pi)**2 # Analytical lambdas (eigenvalues)
@@ -115,10 +134,13 @@ def lambda_plot():
     plt.figure()
     plt.title("Error of lambda_n")
     plt.plot(pb.nlist, ala-pb.la)
-    plt.show()
 
 
 def wave_plot():
+    """
+    Plots the wavefunctions corresponding to different eigenvalues/lambdas
+    In figure: x-markers numerical, lines analytical
+    """
     PLOT_RANGE = [1, 2, 3, 4, 5] # Choose n's to plot corresponding psi_n's
 
     N = 100 # Number of points for discretization
@@ -140,7 +162,6 @@ def wave_plot():
         plt.plot(x, pb.psi[:,i], marker="x", c=color)
         plt.plot(x, apsi[i], label="E%s" % str(n), c=color)
         plt.legend()
-    plt.show()
 
 
 def error_plot(n_eigval):
@@ -159,12 +180,15 @@ def error_plot(n_eigval):
         error.append(avg_err)
     plt.figure()
     plt.plot(N_list, error)
-    plt.show()
 
 
 
 #### 2.5
 def alpha_print_test():
+    """
+    Prints out a table of alphas, i.e. scalar products of the eigenvectors
+    Should equal 0 for differing eigenvectors and 1 for identical eigenvectors
+    """
     N = 10
     NUM_EIGVALS = 5
     pb = ParticleBox(N=N, NUM_EIGVALS=NUM_EIGVALS)
@@ -185,12 +209,18 @@ def alpha_print_test():
 ### 2.6
 
 def psi0_sine_test():
+    """
+    Animates the time evolution of |psi|^2 with the initial wavefunction being a sine funciton
+    """
     pb = ParticleBox()
     pb.Psi0 = np.sqrt(2)*np.sin(np.pi * pb.x)
     animate(pb)
 
 
 def psi0_delta_test():
+    """
+    Animates the time evolution of |psi|^2 with the initial wavefunction being a delta funciton
+    """
     pb = ParticleBox()
     alphas = pb.psi[pb.N//2, :]/np.sqrt(pb.NUM_EIGVALS)
     animate(pb, alphas=alphas, ymin=-20, ymax=20, tmax=1e-2)
@@ -203,6 +233,13 @@ def psi0_delta_test():
 
 ## 3.1
 def high_barrier():
+    """
+    A collective function for several procedures:
+    1. Create a particle box with a high barrier
+    2. Plot some of the first eigenfunctions
+    3. Animate the time evolution of a prob. distr., with i.v. as a l.c. of psi1 and psi2
+    4. Plot the same prob. distr. at times t=0 and t=pi/(l2-l1)
+    """
     N = 900 # Must be a multiple of 3!!!
     NUM_EIGVALS = 10 
 
@@ -215,7 +252,6 @@ def high_barrier():
     for n, p in enumerate(pb.psi.T[0:2], start=1):
         plt.plot(pb.x, p.real, label=r"$\lambda_%s$" % str(n))
     plt.legend()
-    plt.show()
    
     pb.Psi0 = 1 / np.sqrt(2) * (pb.psi[:, 0] + pb.psi[:,1])  
     animate(pb, ymin=-4, ymax=10, tmax=10*np.pi/(pb.la[1]-pb.la[0]))
@@ -232,27 +268,54 @@ def high_barrier():
     plt.figure()
     plt.plot(pb.x, V/max(V))
     plt.plot(pb.x, np.absolute(Psi2)**2, label="t=pi/(l2-l1)")
-    plt.show()
+
+    return pb.la[:6]
 
 
 ## 3.2
 def root_finding():
-    N = 100000
+    """
+    func() : Calculates f for a particular value of lambda
+
+    plot_f() : Plot the function f of lambda (to get a rough idea of where the roots are)
+
+    find_roots() : 
+     - Find minima of the intervals found from inspection of the plot from plot_f
+     - Find root left and right of each minima (and print to console)
+    """
 
     v0 = 1000
-    ala = np.linspace(1, v0-1, N)
-    
-    k = np.sqrt(ala)
-    K = np.sqrt(v0 - ala)
-    Ksin = K * np.sin(k/3)
-    kcos = k * np.cos(k/3)
-    
-    f = np.exp(K/3) * np.square(Ksin + kcos) - np.exp(-K/3) * np.square(Ksin - kcos)
+    N = 90000
 
-    plt.figure()
-    plt.plot(ala, f)
-    #plt.show()
+    la_list = np.linspace(10, v0-1, N)
 
+    def func(la):
+        k = np.sqrt(la)
+        K = np.sqrt(v0 - la)
+        Ksin = K * np.sin(k/3)
+        kcos = k * np.cos(k/3)
+        return np.exp(K/3) * np.square(Ksin + kcos) - np.exp(-K/3) * np.square(Ksin - kcos)
+
+
+    def find_roots():
+        f = func(la_list) 
+        # intervals = [(70, 80), (280, 310), (600, 700)]
+        mins = find_peaks(f)[0]
+        print(mins)
+        zeros = []
+        for c in mins:
+            a = c - 100
+            b = c + 100
+            # c = minimize_scalar(func, bounds=(a,b), method="bounded").x
+            zeros.append( brentq( func, a, c ) )
+            zeros.append( brentq( func, c, b ) )
+        plt.figure()
+        plt.plot(la_list, f)
+        print(zeros)
+        return zeros
+
+    return find_roots()
+    
 
 
 
@@ -273,8 +336,11 @@ if __name__ == "__main__":
     #psi0_delta_test()
 
     ## 3.1
-    # high_barrier()
+    # la1 = high_barrier()
     
     ## 3.2
-    root_finding()
+    la2 = root_finding()
+    print("\nLambda differences (barrier - f):")
+    # print(la1 - la2)
 
+    plt.show()
