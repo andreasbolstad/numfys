@@ -243,8 +243,10 @@ def high_barrier():
     N = 900 # Must be a multiple of 3!!!
     NUM_EIGVALS = 10 
 
+
+    v0 = 1000
     V = np.zeros(N)
-    V[N//3:2*N//3] = 1000
+    V[N//3:2*N//3] = v0
 
     pb = ParticleBox(N=N, NUM_EIGVALS=NUM_EIGVALS, V=V)
     
@@ -259,7 +261,7 @@ def high_barrier():
     Psi1 = get_Psi(pb, t=0)
     Psi2 = get_Psi(pb, t=np.pi/(pb.la[1]-pb.la[0]))
 
-    print(pb.la[:10])
+    print("lambdas:", pb.la[:10])
     
     plt.figure()
     plt.plot(pb.x, V/max(V))
@@ -269,10 +271,10 @@ def high_barrier():
     plt.plot(pb.x, V/max(V))
     plt.plot(pb.x, np.absolute(Psi2)**2, label="t=pi/(l2-l1)")
 
-    return pb.la[:6]
 
 
 ## 3.2
+
 def root_finding():
     """
     func() : Calculates f for a particular value of lambda
@@ -284,11 +286,6 @@ def root_finding():
      - Find root left and right of each minima (and print to console)
     """
 
-    v0 = 1000
-    N = 90000
-
-    la_list = np.linspace(10, v0-1, N)
-
     def func(la):
         k = np.sqrt(la)
         K = np.sqrt(v0 - la)
@@ -297,26 +294,43 @@ def root_finding():
         return np.exp(K/3) * np.square(Ksin + kcos) - np.exp(-K/3) * np.square(Ksin - kcos)
 
 
-    def find_roots():
-        f = func(la_list) 
-        # intervals = [(70, 80), (280, 310), (600, 700)]
-        mins = find_peaks(f)[0]
-        print(mins)
+    def find_roots(f):
+        mins = np.array(find_peaks(-f)[0]) * v0 / N
         zeros = []
+        d = 30
         for c in mins:
-            a = c - 100
-            b = c + 100
-            # c = minimize_scalar(func, bounds=(a,b), method="bounded").x
-            zeros.append( brentq( func, a, c ) )
-            zeros.append( brentq( func, c, b ) )
-        plt.figure()
-        plt.plot(la_list, f)
-        print(zeros)
+            a = max(c - d, c*0.5)
+            b = min(c + d, v0)
+            if func(a) > 0:
+                a = c * 0.5
+            if func(a) > 0 and func(c) < 0:
+                zeros.append( brentq( func, a, c ) )
+            if func(b) > 0 and func(c) < 0:
+                zeros.append( brentq( func, c, b ) )
         return zeros
 
-    return find_roots()
-    
 
+    N = 900000
+    v0 = 1000
+    la_list = np.linspace(0, v0, N)
+    f_la = func(la_list) 
+
+    # 3.5, also need to compare to 3.4
+    print(find_roots(f_la))
+    plt.figure()
+    plt.plot(la_list[N//2:], f_la[N//2:])
+
+    # 3.6
+    niter = 10
+    num_zeros = []
+    v0s = np.linspace(50, 2000, niter)
+    for v0 in v0s: 
+        la_list = np.linspace(0, v0, N)
+        f_la = func(la_list)
+        num_zeros.append(len(find_roots(f_la))) 
+
+    plt.figure()
+    plt.plot(v0s, num_zeros)
 
 
 ###############
@@ -336,11 +350,9 @@ if __name__ == "__main__":
     #psi0_delta_test()
 
     ## 3.1
-    # la1 = high_barrier()
+    #high_barrier()
     
     ## 3.2
-    la2 = root_finding()
-    print("\nLambda differences (barrier - f):")
-    # print(la1 - la2)
+    root_finding()
 
     plt.show()
