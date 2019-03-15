@@ -1,15 +1,19 @@
+# Imports
 import numpy as np
+
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation 
 
 from scipy.linalg import eigh_tridiagonal
 from scipy.integrate import trapz
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation 
-from scipy.optimize import brentq, minimize_scalar
 from scipy.signal import find_peaks
+from scipy.optimize import brentq, minimize_scalar
+from scipy.sparse import diags
 
+# Settings
 cmap = plt.get_cmap('viridis')
-
 np.set_printoptions(linewidth=400)
+
 
 class ParticleBox():               
     """
@@ -32,10 +36,18 @@ class ParticleBox():
 
         self.x = np.linspace(0, 1, N)
         self.dx = 1/(N-1)
+        
+        self.d = 2 / self.dx**2 * np.ones(self.N) + self.V # Diagonal elements
+        self.d[0] = 0
+        self.d[-1] = 0
+
+        self.e = -1 / self.dx**2 * np.ones(self.N-1) # Off-diagonal elements (symmetric)
+        self.e[0] = 0
+        self.e[-1] = 0
+        
         self.la, self.psi = self.set_eigvalsvecs()
         
         self.Psi0 = Psi0
-
 
     def set_eigvalsvecs(self):
         """
@@ -50,12 +62,10 @@ class ParticleBox():
         --                                --    
         """
         # Computing eigvals and vecs without the boundaries to avoid singular matrix. 
-        d = 2 / self.dx**2 * np.ones(self.N-2) + self.V[1:-1] # Diagonal elements
-        e = -1 / self.dx**2 * np.ones(self.N-3) # Next to diagonal elements (symmetric)
 
         psi = np.zeros((self.N, self.NUM_EIGVALS)) # Array of egeinvectors, 2nd axis specifies which eigenvalue is used
         # numpy.eigh_tridiagonal computes eigvals and eigvecs using a symmetric tridiagonal matrix
-        la, psi[1:-1] = eigh_tridiagonal(d, e, select='i', select_range=(0, self.NUM_EIGVALS-1))
+        la, psi[1:-1] = eigh_tridiagonal(self.d[1:-1], self.e[1:-1], select='i', select_range=(0, self.NUM_EIGVALS-1))
 
         for i in range(self.NUM_EIGVALS):
             psi[:,i] = psi[:,i] / np.sqrt(trapz(np.square(psi[:,i]), dx=self.dx))
@@ -74,7 +84,7 @@ class ParticleBox():
 
 
 
-def get_Psi(pb, alphas=None, t=0):
+def get_Psi_at_time(pb, alphas=None, t=0):
     """
     Calculate Psi at a particular time t
     If the argument alphas is given, use these values instead of alphas from pb (the particleBox instance)
@@ -88,26 +98,30 @@ def get_Psi(pb, alphas=None, t=0):
 
 def animate(pb, alphas=None, xmin=0, xmax=1, ymin=-2, ymax=2, nt=1000, tmax=2*np.pi):
     """
-    Animates the probability distribution evolution of the wavefunction of pb (ParticleBox object)
+    Animates the time evolution of the wavefunction of pb (ParticleBox object)
+    line1 : Represents the real value of the wavefunction
+    line2 : Represents the absolute square value of the wavefunction
     """
     fig, ax = plt.subplots()
     line1, = ax.plot([], [])
+    line2, = ax.plot([], [])
 
     def anim_init():
         ax.set_xlim(xmin, xmax)
         ax.set_ylim(ymin, ymax)
-        return line1, 
+        return line1, line2,
 
     def update(t):
-        Psi = get_Psi(pb, alphas=alphas, t=t)
+        Psi = get_Psi_at_time(pb, alphas=alphas, t=t)
         Psi2 = np.absolute(Psi)**2
-        Psi2 = Psi2.real # Discard imaginary zeros
         #print(r"Total probability =", trapz(Psi2, x=x))
-        line1.set_data(pb.x, Psi2) 
-        return line1,
+        line1.set_data(pb.x, Psi.real)
+        line2.set_data(pb.x, Psi2.real) 
+        return line1, line2,
 
     _ = FuncAnimation(fig, update, init_func=anim_init, 
             frames=np.linspace(0, tmax, nt), interval=40, blit=True)
+    plt.show()
 
 
 
@@ -215,6 +229,7 @@ def psi0_sine_test():
     pb = ParticleBox()
     pb.Psi0 = np.sqrt(2)*np.sin(np.pi * pb.x)
     animate(pb)
+    plt.show()
 
 
 def psi0_delta_test():
@@ -258,8 +273,8 @@ def high_barrier():
     pb.Psi0 = 1 / np.sqrt(2) * (pb.psi[:, 0] + pb.psi[:,1])  
     animate(pb, ymin=-4, ymax=10, tmax=10*np.pi/(pb.la[1]-pb.la[0]))
 
-    Psi1 = get_Psi(pb, t=0)
-    Psi2 = get_Psi(pb, t=np.pi/(pb.la[1]-pb.la[0]))
+    Psi1 = get_Psi_at_time(pb, t=0)
+    Psi2 = get_Psi_at_time(pb, t=np.pi/(pb.la[1]-pb.la[0]))
 
     print("lambdas:", pb.la[:10])
     
@@ -364,7 +379,22 @@ def root_finding():
 
 ## 3.3
 def timestepping():
-    pass
+    pb = ParticleBox(N=10, NUM_EIGVALS=5)
+    H = diags((pb.d, pb.e, pb.e), (0, -1, 1))
+    
+    plt.figure()
+    plt.plot(pb.x, pb.psi[:,0].real, label="Start, real")
+    plt.plot(pb.x, pb.psi[:,0].imag, label="Start, imag")
+    plt.legend()
+
+    dt = 0.1
+    psi_t = pb.psi - 1j*dt*H.dot(pb.psi)
+    print(psi_t.real, psi_t.imag)
+    plt.figure()
+    plt.plot(pb.x, psi_t[:,0].real, label="End, real")
+    plt.plot(pb.x, psi_t[:,0].imag, label="End, imag")
+    plt.legend()
+
 
 
 ###############
@@ -376,24 +406,32 @@ if __name__ == "__main__":
     """
 
     ## 2.4
-    #lambda_plot()
-    #wave_plot()
-    #error_plot(3)
+    # lambda_plot()
+    # wave_plot()
+    # error_plot(3)
 
     ## 2.5
-    #alpha_print_test()
+    # alpha_print_test()
 
     ## 2.6
-    #psi0_sine_test()
-    #psi0_delta_test()
+    # psi0_sine_test()
+    # psi0_delta_test()
 
     ## 3.1
-    #high_barrier()
+    # high_barrier()
     
     ## 3.2
-    #root_finding()
+    # root_finding()
 
     ## 3.3
     timestepping()
 
     plt.show()
+    
+
+
+
+
+
+
+
