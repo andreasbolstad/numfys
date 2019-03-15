@@ -286,7 +286,7 @@ def root_finding():
      - Find root left and right of each minima (and print to console)
     """
 
-    def func(la):
+    def func(la, v0):
         k = np.sqrt(la)
         K = np.sqrt(v0 - la)
         Ksin = K * np.sin(k/3)
@@ -294,49 +294,87 @@ def root_finding():
         return np.exp(K/3) * np.square(Ksin + kcos) - np.exp(-K/3) * np.square(Ksin - kcos)
 
 
-    def find_roots(f):
+    def find_roots(f, v0):
         mins = np.array(find_peaks(-f)[0]) * v0 / N
         zeros = []
         d = 30
         for c in mins:
             a = max(c - d, c*0.5)
             b = min(c + d, v0)
-            if func(a) > 0:
-                a = c * 0.5
-            if func(a) > 0 and func(c) < 0:
-                zeros.append( brentq( func, a, c ) )
-            if func(b) > 0 and func(c) < 0:
-                zeros.append( brentq( func, c, b ) )
+
+            c = minimize_scalar(func, args=v0, bounds=(a,b), method='bounded').x 
+
+            if func(a, v0) > 0 and func(c, v0) < 0:
+                zeros.append( brentq( func, a, c, args=v0) )
+            if func(b, v0) > 0 and func(c, v0) < 0:
+                zeros.append( brentq( func, c, b, args=v0 ) )
         return zeros
 
 
-    N = 900000
+    ### TESTS
+
+    N = 90000
     v0 = 1000
     la_list = np.linspace(0, v0, N)
-    f_la = func(la_list) 
+    f_la = func(la_list, v0) 
 
-    # 3.5, also need to compare to 3.4
-    print(find_roots(f_la))
-    plt.figure()
-    plt.plot(la_list[N//2:], f_la[N//2:])
+    # 3.5
+    def print_roots():
+        print("Roots/zeros:", find_roots(f_la, v0)) # Compare with 3.4
+
+
+    def plot_f():
+        plt.figure()
+        plt.plot(la_list, f_la)
 
     # 3.6
-    niter = 10
-    num_zeros = []
-    v0s = np.linspace(50, 2000, niter)
-    for v0 in v0s: 
-        la_list = np.linspace(0, v0, N)
-        f_la = func(la_list)
-        num_zeros.append(len(find_roots(f_la))) 
+    def plot_number_of_zeros():
+        niter = 1000
+        num_zeros = []
+        v0s = np.linspace(10, 2500, niter)
+        print("Plotting... Should take less than a minute.")
+        for v0 in v0s:
+            la_list = np.linspace(0, v0, N)
+            f_la = func(la_list, v0)
+            num_zeros.append(len(find_roots(f_la, v0))) 
 
-    plt.figure()
-    plt.plot(v0s, num_zeros)
+        plt.figure()
+        plt.plot(v0s, num_zeros)
+
+    def find_small_eig_v0():
+        v0 = 20
+        pnr = 0
+        multiplier = 1
+        while abs(multiplier) > 1e-5:
+            la_list = np.linspace(0, v0, N)
+            f_la = func(la_list, v0)
+            nnr = len(find_roots(f_la, v0))
+            v0 += 1 * multiplier
+            if nnr != pnr:
+                pnr = nnr
+                multiplier /= -10
+        print("Smallest value of v0 that gives 1 eigenvalue < v0:", v0)
+
+    # Each test is independent. You can run only one if you want
+    print_roots()
+    plot_f()
+    plot_number_of_zeros()
+    find_small_eig_v0()
+
+
+## 3.3
+def timestepping():
+    pass
 
 
 ###############
 ### Main ######
 ###############
 if __name__ == "__main__":
+    """
+    Numbers indicate which section (not task) in the assignment the function calls are relevant for
+    """
+
     ## 2.4
     #lambda_plot()
     #wave_plot()
@@ -353,6 +391,9 @@ if __name__ == "__main__":
     #high_barrier()
     
     ## 3.2
-    root_finding()
+    #root_finding()
+
+    ## 3.3
+    timestepping()
 
     plt.show()
