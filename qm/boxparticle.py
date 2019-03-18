@@ -258,7 +258,6 @@ def high_barrier():
     N = 900 # Must be a multiple of 3!!!
     NUM_EIGVALS = 10 
 
-
     v0 = 1000
     V = np.zeros(N)
     V[N//3:2*N//3] = v0
@@ -378,24 +377,47 @@ def root_finding():
 
 
 ## 3.3
-def timestepping():
-    pb = ParticleBox(N=10, NUM_EIGVALS=5)
+def timestepping_euler():
+    N = 900 # Must be a multiple of 3!!!
+    NUM_EIGVALS = 10 
+
+    v0 = 1000
+    V = np.zeros(N)
+    V[N//3:2*N//3] = v0
+
+    pb = ParticleBox(N=N, NUM_EIGVALS=NUM_EIGVALS, V=V)
+    psi_t = pb.psi[:,0]
     H = diags((pb.d, pb.e, pb.e), (0, -1, 1))
     
-    plt.figure()
-    plt.plot(pb.x, pb.psi[:,0].real, label="Start, real")
-    plt.plot(pb.x, pb.psi[:,0].imag, label="Start, imag")
-    plt.legend()
+    dt = 0.01
+    nt = 4
 
-    dt = 0.1
-    psi_t = pb.psi - 1j*dt*H.dot(pb.psi)
-    print(psi_t.real, psi_t.imag)
-    plt.figure()
-    plt.plot(pb.x, psi_t[:,0].real, label="End, real")
-    plt.plot(pb.x, psi_t[:,0].imag, label="End, imag")
-    plt.legend()
+    dx = pb.dx
+    cfl = dt/dx**2
+    print("dt=%s, dx=%s, cfl=%s" % (str(dt), str(dx), str(cfl)))
+
+    f, axarr = plt.subplots(nt)
+    for i in range(0, nt):
+        psi_t = psi_t - 1j*dt*H.dot(psi_t)
+        axarr[i].plot(pb.x, psi_t.real, label="Real")
+        axarr[i].plot(pb.x, psi_t.imag, label="Imag")
+    f.legend()
+
+    # psi_t = pb.psi[:,0]
+    # num_cfls = 3
+    # cfls = np.linspace(7000, 9000, num_cfls)
+    # plt.figure()
+    # for i in range(0, num_cfls):
+        # dt = cfls[i]*dx**2
+        # psi_t = psi_t - 1j*dt*H.dot(psi_t)
+        # plt.plot(pb.x, psi_t.real, label="real, cfls = %s" % cfls[i])
+        # plt.plot(pb.x, psi_t.imag, label="imag, cfls = %s" % cfls[i])
+    # plt.legend()
 
 
+
+def timestepping_crank():
+    pass
 
 ###############
 ### Main ######
@@ -424,7 +446,8 @@ if __name__ == "__main__":
     # root_finding()
 
     ## 3.3
-    timestepping()
+    timestepping_euler()
+    # timestepping_crank()
 
     plt.show()
     
