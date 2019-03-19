@@ -29,19 +29,16 @@ class ParticleBox():
     N, NUM_EIGVALS, V, Psi0, nlist, x, dx, la, psi, Psi0, alphas
     """
 
-
-    def __init__(self, N=1002, NUM_EIGVALS=100, V=None, Psi0=None):
+    def __init__(self, N=1002, NUM_EIGVALS=100, v0=0, Psi0=None):
         self.N = N - N%3 # Number of points for discretization, muliple of 3 to get symmetric wells.
         self.NUM_EIGVALS = NUM_EIGVALS # Number of eigenvalues to get
         self.nlist = np.linspace(1, NUM_EIGVALS, NUM_EIGVALS, dtype=int) # All n's of different eigenvalues
     
-        if V is not None:
-            self.V = V
-        else:
-            self.V = np.zeros(N)
+        self.V = np.zeros(self.N)
+        self.V[self.N//3 : 2*self.N//3] = v0
 
-        self.x = np.linspace(0, 1, N)
-        self.dx = 1/(N-1)
+        self.x = np.linspace(0, 1, self.N)
+        self.dx = 1/(self.N-1)
         
         self.d = 2 / self.dx**2 * np.ones(self.N) + self.V # Diagonal elements
         self.d[0] = 0
@@ -54,6 +51,7 @@ class ParticleBox():
         self.la, self.psi = self.set_eigvalsvecs()
         
         self.Psi0 = Psi0
+
 
     def set_eigvalsvecs(self):
         """
@@ -69,7 +67,7 @@ class ParticleBox():
         """
         # Computing eigvals and vecs without the boundaries to avoid singular matrix. 
 
-        psi = np.zeros((self.N, self.NUM_EIGVALS)) # Array of egeinvectors, 2nd axis specifies which eigenvalue is used
+        psi = np.zeros((self.N, self.NUM_EIGVALS), dtype=np.complex_) # Array of egeinvectors, 2nd axis specifies which eigenvalue is used
         # numpy.eigh_tridiagonal computes eigvals and eigvecs using a symmetric tridiagonal matrix
         la, psi[1:-1] = eigh_tridiagonal(self.d[1:-1], self.e[1:-1], select='i', select_range=(0, self.NUM_EIGVALS-1))
 
@@ -83,23 +81,29 @@ class ParticleBox():
     @property # Call as a variable instead of function, i.e. obj.a instead of obj.a()
     def alphas(self):
         product = self.psi.T * self.Psi0 
+        bracket = product.real
         alphas = np.zeros(self.NUM_EIGVALS)
-        for i, elem in enumerate(product):
+        for i, elem in enumerate(bracket):
             alphas[i] = trapz(elem, dx=self.dx)
         return alphas
 
 
 # Mostly animation functions:
-def psi_at_time(t, pb, alphas):
+def psi_at_time_box(t, pb, alphas):
     """Return x and psi at a particlar time, using linear combination of alphas"""
     coeffs = alphas * np.exp(-1j*pb.la*t)
     Psi_components = coeffs * pb.psi 
     return pb.x, np.sum(Psi_components, axis=1)
 
 
-def psi_at_time_boxalphas(t, pb):
+def psi_at_time_box_noalphas(t, pb):
     """Convenience function, use pb.alphas instead of manually specifying them"""
-    return psi_at_time(t, pb, pb.alphas)
+    return psi_at_time_box(t, pb, pb.alphas)
+
+
+def psi_at_time_crank(t, x, psi, A):
+    psi[:] = A*psi
+    return x, psi
 
 
 def animate(func_x_psi, *fargs, xmin=0, xmax=1, ymin=-2, ymax=2, nt=1000, tmax=2*np.pi):
@@ -168,10 +172,9 @@ def wave_plot():
 
     pb = ParticleBox(N, NUM_EIGVALS) 
 
-    x = pb.x 
-    apsi = np.empty((NUM_EIGVALS, N), dtype=float) 
+    apsi = np.empty((NUM_EIGVALS, pb.N), dtype=float) 
     for n in range(1, NUM_EIGVALS+1):
-        apsi[n-1] = np.sqrt(2) * np.sin(n*np.pi*x)
+        apsi[n-1] = np.sqrt(2) * np.sin(n*np.pi*pb.x)
     
     plt.figure()
     plt.xlabel("x'")
@@ -179,8 +182,8 @@ def wave_plot():
     for n in PLOT_RANGE:
         i = n - 1
         color = cmap(float(i)/NUM_EIGVALS)
-        plt.plot(x, pb.psi[:,i], marker="x", c=color)
-        plt.plot(x, apsi[i], label="E%s" % str(n), c=color)
+        plt.plot(pb.x, pb.psi[:,i], marker="x", c=color)
+        plt.plot(pb.x, apsi[i], label="E%s" % str(n), c=color)
         plt.legend()
 
 
@@ -190,13 +193,12 @@ def error_plot(n_eigval):
     """
     N_list = np.array(range(20, 201))
     error = []
-    for N in N_list:
-        pb = ParticleBox(N, n_eigval)
+    for n in N_list:
+        pb = ParticleBox(n, n_eigval)
         psi = pb.psi[:, n_eigval-1]
-        x = np.linspace(0, 1, N)
-        apsi = np.sqrt(2) * np.sin(n_eigval*np.pi*x) 
+        apsi = np.sqrt(2) * np.sin(n_eigval*np.pi*pb.x) 
         abs_err = np.abs(psi-apsi)
-        avg_err = np.sum(abs_err) / N 
+        avg_err = np.sum(abs_err) / pb.N 
         error.append(avg_err)
     plt.figure()
     plt.plot(N_list, error)
@@ -234,7 +236,7 @@ def psi0_sine_test():
     """
     pb = ParticleBox()
     pb.Psi0 = np.sqrt(2)*np.sin(np.pi * pb.x)
-    animate(psi_at_time_boxalphas, pb)
+    animate(psi_at_time_box_noalphas, pb)
     plt.show()
 
 
@@ -244,7 +246,7 @@ def psi0_delta_test():
     """
     pb = ParticleBox()
     alphas = pb.psi[pb.N//2, :]/np.sqrt(pb.NUM_EIGVALS)
-    animate(psi_at_time, pb, alphas, ymin=-20, ymax=20, tmax=1e-2)
+    animate(psi_at_time_box, pb, alphas, ymin=-20, ymax=20, tmax=1e-2)
 
 
 
@@ -263,12 +265,9 @@ def high_barrier():
     """
     N = 900 # Must be a multiple of 3!!!
     NUM_EIGVALS = 10 
-
     v0 = 1000
-    V = np.zeros(N)
-    V[N//3:2*N//3] = v0
 
-    pb = ParticleBox(N=N, NUM_EIGVALS=NUM_EIGVALS, V=V)
+    pb = ParticleBox(N=N, NUM_EIGVALS=NUM_EIGVALS, v0=v0)
     
     plt.figure()
     for n, p in enumerate(pb.psi.T[0:2], start=1):
@@ -276,20 +275,26 @@ def high_barrier():
     plt.legend()
    
     pb.Psi0 = 1 / np.sqrt(2) * (pb.psi[:, 0] + pb.psi[:,1])  
-    animate(pb, ymin=-4, ymax=10, tmax=10*np.pi/(pb.la[1]-pb.la[0]))
+    animate(psi_at_time_box_noalphas, pb, ymin=-4, ymax=10, tmax=10*np.pi/(pb.la[1]-pb.la[0]))
+    
+    t1 = 0
+    x, Psi1 = psi_at_time_box_noalphas(t1, pb)
+    
 
-    Psi1 = get_Psi_at_time(pb, t=0)
-    Psi2 = get_Psi_at_time(pb, t=np.pi/(pb.la[1]-pb.la[0]))
+    t2 = np.pi/(pb.la[1]-pb.la[0])
+    x, Psi2 = psi_at_time_box_noalphas(t2, pb)
 
     print("lambdas:", pb.la[:10])
     
-    plt.figure()
-    plt.plot(pb.x, V/max(V))
-    plt.plot(pb.x, np.absolute(Psi1)**2, label="t=0", color='b')
+    y = pb.V/max(pb.V)
 
     plt.figure()
-    plt.plot(pb.x, V/max(V))
-    plt.plot(pb.x, np.absolute(Psi2)**2, label="t=pi/(l2-l1)")
+    plt.plot(x, y)
+    plt.plot(pb.x, abs_squared(Psi1), label="t=0", color='b')
+
+    plt.figure()
+    plt.plot(x, y)
+    plt.plot(x, abs_squared(Psi2), label="t=pi/(l2-l1)")
 
 
 
@@ -393,15 +398,14 @@ def timestepping_euler():
     Plots values after nt number of iterations. Reduce this number when
     increasing time step
     """
-    N = 999 # Must be a multiple of 3!!!
+    N = 999
     NUM_EIGVALS = 10 
 
     v0 = 1000
-    V = np.zeros(N)
-    V[N//3:2*N//3] = v0
 
-    pb = ParticleBox(N=N, NUM_EIGVALS=NUM_EIGVALS, V=V)
+    pb = ParticleBox(N=N, NUM_EIGVALS=NUM_EIGVALS, v0=v0)
     psi_t = pb.psi[:,0]
+
     H = diags((pb.d, pb.e, pb.e), (0, -1, 1))
     
     dt = 1e-6
@@ -419,7 +423,6 @@ def timestepping_euler():
     f.legend()
 
 
-
 def timestepping_crank():
     """Testing stuff with the Crank Nicolson scheme given in eq. 3.8 in the
     assignment."""
@@ -427,10 +430,7 @@ def timestepping_crank():
     NUM_EIGVALS = 1
     v0 = 1000 
 
-    V = np.zeros(N)
-    V[N//3:2*N//3] = v0
-
-    pb = ParticleBox(N=N, NUM_EIGVALS=NUM_EIGVALS, V=V)
+    pb = ParticleBox(N=N, NUM_EIGVALS=NUM_EIGVALS, v0=v0)
     psi_t = pb.psi[:,0]
     H = diags((pb.d, pb.e, pb.e), (0, -1, 1))
 
@@ -442,13 +442,14 @@ def timestepping_crank():
     Linv = inv(L)
 
     A = R * Linv
-    nt = 10
-    for i in range(nt):
-        psi_t = A * psi_t
     
-    f, ax = plt.subplots(1)
-    ax.plot(pb.x, psi_t.real, label="Real")
-    ax.plot(pb.x, psi_t.imag, label="Imag")
+    animate(psi_at_time_crank, pb.x, psi_t, A, ymax=4)
+
+
+## 4.1
+def lower_barrier():
+    v0 = 100
+    vr = 50
     
 
 
@@ -474,14 +475,14 @@ if __name__ == "__main__":
     # psi0_delta_test()
 
     ## 3.1
-    # high_barrier()
+    high_barrier()
     
     ## 3.2
     # root_finding()
 
     ## 3.3
-    #timestepping_euler()
-    timestepping_crank()
+    # timestepping_euler()
+    # timestepping_crank()
 
     plt.show()
     
