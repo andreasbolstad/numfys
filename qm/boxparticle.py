@@ -1,4 +1,5 @@
 # Imports
+from functools import partial
 import numpy as np
 
 import matplotlib.pyplot as plt
@@ -8,11 +9,16 @@ from scipy.linalg import eigh_tridiagonal
 from scipy.integrate import trapz
 from scipy.signal import find_peaks
 from scipy.optimize import brentq, minimize_scalar
-from scipy.sparse import diags
+from scipy.sparse import diags, eye
+from scipy.sparse.linalg import inv
 
 # Settings
 cmap = plt.get_cmap('viridis')
 np.set_printoptions(linewidth=400)
+
+
+def abs_squared(psi):
+    return psi.real**2 + psi.imag**2
 
 
 class ParticleBox():               
@@ -24,8 +30,8 @@ class ParticleBox():
     """
 
 
-    def __init__(self, N=1000, NUM_EIGVALS=100, V=None, Psi0=None):
-        self.N = N # Number of points for discretization
+    def __init__(self, N=1002, NUM_EIGVALS=100, V=None, Psi0=None):
+        self.N = N - N%3 # Number of points for discretization, muliple of 3 to get symmetric wells.
         self.NUM_EIGVALS = NUM_EIGVALS # Number of eigenvalues to get
         self.nlist = np.linspace(1, NUM_EIGVALS, NUM_EIGVALS, dtype=int) # All n's of different eigenvalues
     
@@ -83,20 +89,20 @@ class ParticleBox():
         return alphas
 
 
-
-def get_Psi_at_time(pb, alphas=None, t=0):
-    """
-    Calculate Psi at a particular time t
-    If the argument alphas is given, use these values instead of alphas from pb (the particleBox instance)
-    """
-    if not type(alphas) is np.ndarray:
-        alphas = pb.alphas
+# Mostly animation functions:
+def psi_at_time(t, pb, alphas):
+    """Return x and psi at a particlar time, using linear combination of alphas"""
     coeffs = alphas * np.exp(-1j*pb.la*t)
     Psi_components = coeffs * pb.psi 
-    return np.sum(Psi_components, axis=1)
+    return pb.x, np.sum(Psi_components, axis=1)
 
 
-def animate(pb, alphas=None, xmin=0, xmax=1, ymin=-2, ymax=2, nt=1000, tmax=2*np.pi):
+def psi_at_time_boxalphas(t, pb):
+    """Convenience function, use pb.alphas instead of manually specifying them"""
+    return psi_at_time(t, pb, pb.alphas)
+
+
+def animate(func_x_psi, *fargs, xmin=0, xmax=1, ymin=-2, ymax=2, nt=1000, tmax=2*np.pi):
     """
     Animates the time evolution of the wavefunction of pb (ParticleBox object)
     line1 : Represents the real value of the wavefunction
@@ -112,11 +118,11 @@ def animate(pb, alphas=None, xmin=0, xmax=1, ymin=-2, ymax=2, nt=1000, tmax=2*np
         return line1, line2,
 
     def update(t):
-        Psi = get_Psi_at_time(pb, alphas=alphas, t=t)
-        Psi2 = np.absolute(Psi)**2
-        #print(r"Total probability =", trapz(Psi2, x=x))
-        line1.set_data(pb.x, Psi.real)
-        line2.set_data(pb.x, Psi2.real) 
+        args = fargs
+        x, Psi = func_x_psi(t, *fargs)
+        Psi2 = abs_squared(Psi)
+        line1.set_data(x, Psi.real)
+        line2.set_data(x, Psi2) 
         return line1, line2,
 
     _ = FuncAnimation(fig, update, init_func=anim_init, 
@@ -228,7 +234,7 @@ def psi0_sine_test():
     """
     pb = ParticleBox()
     pb.Psi0 = np.sqrt(2)*np.sin(np.pi * pb.x)
-    animate(pb)
+    animate(psi_at_time_boxalphas, pb)
     plt.show()
 
 
@@ -238,7 +244,7 @@ def psi0_delta_test():
     """
     pb = ParticleBox()
     alphas = pb.psi[pb.N//2, :]/np.sqrt(pb.NUM_EIGVALS)
-    animate(pb, alphas=alphas, ymin=-20, ymax=20, tmax=1e-2)
+    animate(psi_at_time, pb, alphas, ymin=-20, ymax=20, tmax=1e-2)
 
 
 
@@ -290,7 +296,7 @@ def high_barrier():
 ## 3.2
 
 def root_finding():
-    """
+    """  
     func() : Calculates f for a particular value of lambda
 
     plot_f() : Plot the function f of lambda (to get a rough idea of where the roots are)
@@ -378,7 +384,16 @@ def root_finding():
 
 ## 3.3
 def timestepping_euler():
-    N = 900 # Must be a multiple of 3!!!
+    """
+    A simple test function, not well implemented as is...
+    Vary N and dt to test performance of the forward euler method on the
+    Schrodinger equation.
+    Testing for different values will show how divergence does/does not
+    correspond to CFL number
+    Plots values after nt number of iterations. Reduce this number when
+    increasing time step
+    """
+    N = 999 # Must be a multiple of 3!!!
     NUM_EIGVALS = 10 
 
     v0 = 1000
@@ -389,35 +404,54 @@ def timestepping_euler():
     psi_t = pb.psi[:,0]
     H = diags((pb.d, pb.e, pb.e), (0, -1, 1))
     
-    dt = 0.01
-    nt = 4
+    dt = 1e-6
+    nt = 26
 
     dx = pb.dx
     cfl = dt/dx**2
     print("dt=%s, dx=%s, cfl=%s" % (str(dt), str(dx), str(cfl)))
 
-    f, axarr = plt.subplots(nt)
-    for i in range(0, nt):
+    f, ax = plt.subplots(1)
+    for i in range(nt):
         psi_t = psi_t - 1j*dt*H.dot(psi_t)
-        axarr[i].plot(pb.x, psi_t.real, label="Real")
-        axarr[i].plot(pb.x, psi_t.imag, label="Imag")
+    ax.plot(pb.x, psi_t.real, label="Real")
+    ax.plot(pb.x, psi_t.imag, label="Imag")
     f.legend()
-
-    # psi_t = pb.psi[:,0]
-    # num_cfls = 3
-    # cfls = np.linspace(7000, 9000, num_cfls)
-    # plt.figure()
-    # for i in range(0, num_cfls):
-        # dt = cfls[i]*dx**2
-        # psi_t = psi_t - 1j*dt*H.dot(psi_t)
-        # plt.plot(pb.x, psi_t.real, label="real, cfls = %s" % cfls[i])
-        # plt.plot(pb.x, psi_t.imag, label="imag, cfls = %s" % cfls[i])
-    # plt.legend()
 
 
 
 def timestepping_crank():
-    pass
+    """Testing stuff with the Crank Nicolson scheme given in eq. 3.8 in the
+    assignment."""
+    N = 999
+    NUM_EIGVALS = 1
+    v0 = 1000 
+
+    V = np.zeros(N)
+    V[N//3:2*N//3] = v0
+
+    pb = ParticleBox(N=N, NUM_EIGVALS=NUM_EIGVALS, V=V)
+    psi_t = pb.psi[:,0]
+    H = diags((pb.d, pb.e, pb.e), (0, -1, 1))
+
+    dt = 0.01
+
+    I = eye(N)
+    R = I - 1j/2*dt*H
+    L = I + 1j/2*dt*H
+    Linv = inv(L)
+
+    A = R * Linv
+    nt = 10
+    for i in range(nt):
+        psi_t = A * psi_t
+    
+    f, ax = plt.subplots(1)
+    ax.plot(pb.x, psi_t.real, label="Real")
+    ax.plot(pb.x, psi_t.imag, label="Imag")
+    
+
+
 
 ###############
 ### Main ######
@@ -446,14 +480,11 @@ if __name__ == "__main__":
     # root_finding()
 
     ## 3.3
-    timestepping_euler()
-    # timestepping_crank()
+    #timestepping_euler()
+    timestepping_crank()
 
     plt.show()
     
-
-
-
 
 
 
