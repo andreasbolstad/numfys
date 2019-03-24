@@ -6,49 +6,59 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation 
 
 from scipy.linalg import eigh_tridiagonal
-from scipy.integrate import trapz
+from scipy.integrate import trapz, simps
 from scipy.signal import find_peaks
 from scipy.optimize import brentq, minimize_scalar
 from scipy.sparse import diags, eye
 from scipy.sparse.linalg import inv
+from scipy.stats import linregress
 
 # Settings
 cmap = plt.get_cmap('viridis')
 np.set_printoptions(linewidth=400)
 
 
+# Absolute value squared of a wavefunction psi
 def abs_squared(psi):
     return psi.real**2 + psi.imag**2
 
 
 class ParticleBox():               
     """
-    Class for particle boxes, convenient for storing all relevant variables.
+    Convenience class for storing/creating several variables used in several tasks.
     
     Member variables:
-    N, NUM_EIGVALS, V, Psi0, nlist, x, dx, la, psi, Psi0, alphas
+    N, NUM_EIGVALS, V, Psi0, nlist, x, dx, d, e, H, la, psi, Psi0, alphas
+
+    __init__ : constructor
+    set_eigvalsvecs : creates eigenvalues and eigenvectors
+    alphas : property function instead of normal variable 
+            (reason: usually only called once and too costly to put in __init__)
     """
 
-    def __init__(self, N=1002, NUM_EIGVALS=100, v0=0, Psi0=None):
+    def __init__(self, N=1002, NUM_EIGVALS=100, v0=0, vr=0, Psi0=None):
         self.N = N - N%3 # Number of points for discretization, muliple of 3 to get symmetric wells.
         self.NUM_EIGVALS = NUM_EIGVALS # Number of eigenvalues to get
         self.nlist = np.linspace(1, NUM_EIGVALS, NUM_EIGVALS, dtype=int) # All n's of different eigenvalues
     
         self.V = np.zeros(self.N)
         self.V[self.N//3 : 2*self.N//3] = v0
+        self.V[2*self.N//3:] = vr 
 
         self.x = np.linspace(0, 1, self.N)
         self.dx = 1/(self.N-1)
         
         self.d = 2 / self.dx**2 * np.ones(self.N) + self.V # Diagonal elements
-        self.d[0] = 0
-        self.d[-1] = 0
+        self.d[0] = 0 # Boundary condition
+        self.d[-1] = 0 # Boundary condition
 
         self.e = -1 / self.dx**2 * np.ones(self.N-1) # Off-diagonal elements (symmetric)
-        self.e[0] = 0
-        self.e[-1] = 0
+        self.e[0] = 0 # Boundary condition
+        self.e[-1] = 0 # Boundary condition
         
-        self.la, self.psi = self.set_eigvalsvecs()
+        self.H = diags((self.d, self.e, self.e), (0, -1, 1))
+
+        self.la, self.psi = self.set_eigvalsvecs() # Find eigenvalues and eigenvectors for this system
         
         self.Psi0 = Psi0
 
@@ -66,15 +76,15 @@ class ParticleBox():
         --                                --    
         """
         # Computing eigvals and vecs without the boundaries to avoid singular matrix. 
-
-        psi = np.zeros((self.N, self.NUM_EIGVALS), dtype=np.complex_) # Array of egeinvectors, 2nd axis specifies which eigenvalue is used
+        # Array of egeinvectors, 2nd axis specifies which eigenvalue is used
+        psi = np.zeros((self.N, self.NUM_EIGVALS), dtype=np.complex_)
         # numpy.eigh_tridiagonal computes eigvals and eigvecs using a symmetric tridiagonal matrix
         la, psi[1:-1] = eigh_tridiagonal(self.d[1:-1], self.e[1:-1], select='i', select_range=(0, self.NUM_EIGVALS-1))
 
         for i in range(self.NUM_EIGVALS):
             psi[:,i] = psi[:,i] / np.sqrt(trapz(np.square(psi[:,i]), dx=self.dx))
-            if psi[1,i] < 0: # Invert y-coordinate if negative at x=0 (want sinx behavior, not -sinx)
-                psi[:,i] *= -1
+            # if psi[1,i] < 0: # Invert y-coordinate if negative at x=0 (want sinx behavior, not -sinx)
+            #     psi[:,i] *= -1
         return la, psi 
 
 
@@ -263,7 +273,7 @@ def high_barrier():
     3. Animate the time evolution of a prob. distr., with i.v. as a l.c. of psi1 and psi2
     4. Plot the same prob. distr. at times t=0 and t=pi/(l2-l1)
     """
-    N = 900 # Must be a multiple of 3!!!
+
     NUM_EIGVALS = 10 
     v0 = 1000
 
@@ -406,7 +416,7 @@ def timestepping_euler():
     pb = ParticleBox(N=N, NUM_EIGVALS=NUM_EIGVALS, v0=v0)
     psi_t = pb.psi[:,0]
 
-    H = diags((pb.d, pb.e, pb.e), (0, -1, 1))
+    H = pb.H
     
     dt = 1e-6
     nt = 26
@@ -417,7 +427,7 @@ def timestepping_euler():
 
     f, ax = plt.subplots(1)
     for i in range(nt):
-        psi_t = psi_t - 1j*dt*H.dot(psi_t)
+        psi_t = psi_t - 1j*dt*H.dot(psi_t) # Symmetric, so axis in dotproduct shouldn't matter
     ax.plot(pb.x, psi_t.real, label="Real")
     ax.plot(pb.x, psi_t.imag, label="Imag")
     f.legend()
@@ -432,7 +442,7 @@ def timestepping_crank():
 
     pb = ParticleBox(N=N, NUM_EIGVALS=NUM_EIGVALS, v0=v0)
     psi_t = pb.psi[:,0]
-    H = diags((pb.d, pb.e, pb.e), (0, -1, 1))
+    H = pb.H
 
     dt = 0.01
 
@@ -449,8 +459,108 @@ def timestepping_crank():
 ## 4.1
 def lower_barrier():
     v0 = 100
-    vr = 50
+    NUM_EIGVALS = 2
+
+    nlambda = 100
+    vrs = np.linspace(-250, 250, nlambda)
     
+    las0 = np.zeros(nlambda)
+    las1 = np.zeros(nlambda)
+    for i, vr in enumerate(vrs):
+        pb = ParticleBox(NUM_EIGVALS=NUM_EIGVALS, v0=v0, vr=vr)
+        las0[i] = pb.la[0]
+        las1[i] = pb.la[1]
+
+    plt.figure()
+    plt.plot(vrs, las0, label=r'$\lambda_0$')
+    plt.plot(vrs, las1, label=r'$\lambda_1$')
+    plt.legend()
+    plt.xlabel(r'$\nu_r$')
+    plt.ylabel(r'$\lambda$')
+
+    ## Large Vr check
+    pb_plus = ParticleBox(NUM_EIGVALS=1, v0=v0, vr=100)
+    pb_minus = ParticleBox(NUM_EIGVALS=1, v0=v0, vr=-100)
+    
+    f, (ax1, ax2) = plt.subplots(2)
+    ax1.plot(pb_plus.x, pb_plus.psi[:,0])
+    ax1.plot(pb_plus.x, pb_plus.V/max(pb_plus.V))
+    ax2.plot(pb_minus.x, pb_minus.psi[:,0])
+    ax2.plot(pb_minus.x, pb_minus.V/max(pb_minus.V))
+
+    # Find difference in eps0
+    pb = ParticleBox(NUM_EIGVALS=NUM_EIGVALS, v0=v0)
+    eps0 = pb.la[1] - pb.la[0]
+    print("eps0 =", eps0) 
+    
+
+## 4.2
+def calc_trans_amp():
+    """
+    23.03: There seems to be two regimes, smaller than 5 and larger than 10 ...
+    """
+    NUM_EIGVALS = 2
+    v0 = 100
+    
+    x = np.linspace(0.1, 10, 100) 
+    y = np.zeros(x.size)
+    for i, vr in enumerate(x):
+        pb = ParticleBox( NUM_EIGVALS=NUM_EIGVALS, v0=v0) # Ground state
+        pbr = ParticleBox( NUM_EIGVALS=NUM_EIGVALS, v0=v0, vr=vr) # Modulated state => Hamiltonian for tunneling
+        H = pbr.H.real # Discarding imaginary zeros
+        psi0 = pb.psi[:, 0].real
+        psi1 = pb.psi[:, 1].real
+        integrand = psi0 * H.dot(psi1)
+        y[i] = trapz(integrand, dx=pb.dx)
+
+    slope, *_ = linregress(x, y)
+
+    print("tau(vr) = vr *", slope)
+
+    plt.figure()
+    plt.xlabel(r'$\nu_r$')
+    plt.ylabel(r'$\tau$')
+    plt.plot(x, y, marker='x', label=r"Evaluated points")
+    plt.plot(x, x*slope, label=r"LinReg (Slope = %f)" % slope)
+    plt.legend()
+
+
+## 4.3
+def rabi_oscillations():
+    eps0 = 5.690776695021668 # For v0 = 100
+    tau = 0.5 * eps0
+
+    n = 10000 # timesteps
+    tmax = 2*np.pi / tau
+    dt = tmax / n # timestep length
+
+    psi = np.zeros((2, n), dtype=np.complex_)
+    psi[0, 0] = 1
+    
+    H = np.zeros((n, 2, 2), dtype=np.complex_)
+    for k in range(n):
+        t = eps0*k*dt
+        omega = eps0 
+        Hval = tau * np.sin(t*eps0/omega)
+        H[k, 0, 1] = np.exp(-1j*t) *  Hval
+        H[k, 1, 0] = np.exp(1j*t) * Hval
+
+    I = np.identity(2)
+    rhs = psi[:,0]
+    for k in range(1, n):
+        t = k*dt
+        lhs = I + 1j/2*dt*H[k]
+        invlhs = np.linalg.inv(lhs)
+        psi[:, k] = invlhs @ rhs
+        rhs -= 1j*dt*(H[k] @ psi[:,k])
+        
+    x = np.linspace(0, n*dt, n)
+    plt.figure()
+    plt.plot(x, abs_squared(psi[1]))
+    
+    times = np.linspace(0, dt*n, n)
+    y = np.sin(times*tau/2)**2
+    plt.plot(x, y)
 
 
 
@@ -465,7 +575,7 @@ if __name__ == "__main__":
     ## 2.4
     # lambda_plot()
     # wave_plot()
-    # error_plot(3)
+    # error_plot(3) # Number specifies which eigenfunction to plot the error for
 
     ## 2.5
     # alpha_print_test()
@@ -475,7 +585,7 @@ if __name__ == "__main__":
     # psi0_delta_test()
 
     ## 3.1
-    high_barrier()
+    # high_barrier()
     
     ## 3.2
     # root_finding()
@@ -483,6 +593,15 @@ if __name__ == "__main__":
     ## 3.3
     # timestepping_euler()
     # timestepping_crank()
+
+    ## 4.1
+    # lower_barrier()
+
+    ## 4.2
+    # calc_trans_amp() 
+
+    ## 4.3
+    rabi_oscillations()
 
     plt.show()
     
