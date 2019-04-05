@@ -3,6 +3,7 @@ testing/
 
 *.o
 *.txt
+*.pdf
 
 nodecreate
 percolate
