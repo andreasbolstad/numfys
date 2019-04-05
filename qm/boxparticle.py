@@ -82,9 +82,7 @@ class ParticleBox():
         la, psi[1:-1] = eigh_tridiagonal(self.d[1:-1], self.e[1:-1], select='i', select_range=(0, self.NUM_EIGVALS-1))
 
         for i in range(self.NUM_EIGVALS):
-            psi[:,i] = psi[:,i] / np.sqrt(trapz(np.square(psi[:,i]), dx=self.dx))
-            # if psi[1,i] < 0: # Invert y-coordinate if negative at x=0 (want sinx behavior, not -sinx)
-            #     psi[:,i] *= -1
+            psi[:,i] = psi[:,i] / np.sqrt(trapz(abs_squared(psi[:,i]), dx=self.dx)) # Normalize each function
         return la, psi 
 
 
@@ -103,7 +101,9 @@ def psi_at_time_box(t, pb, alphas):
     """Return x and psi at a particlar time, using linear combination of alphas"""
     coeffs = alphas * np.exp(-1j*pb.la*t)
     Psi_components = coeffs * pb.psi 
-    return pb.x, np.sum(Psi_components, axis=1)
+    Psi = np.sum(Psi_components, axis=1)
+    # print(np.sum(abs_squared(Psi))) # Check normalization
+    return pb.x, Psi
 
 
 def psi_at_time_box_noalphas(t, pb):
@@ -153,21 +153,28 @@ def lambda_plot():
     1st plot: Numerical and analytical version
     2nd plot: Error (i.e. difference between the numerical and analytical version)
     """
-    pb = ParticleBox()
+    pb = ParticleBox(NUM_EIGVALS=20)
 
     ala = (pb.nlist*np.pi)**2 # Analytical lambdas (eigenvalues)
 
-    plt.figure()
-    plt.title(r'$\lambda_n(E_n) = \frac{E_n}{E_0},\ E_0 = \frac{\hbar^2}{2mL^2}$')
-    plt.xlabel(r'n')
-    plt.ylabel(r"$\lambda_n$")
-    plt.plot(pb.nlist, ala, label=r"$\lambda^{analytical}$")
-    plt.plot(pb.nlist, pb.la, label=r"$\lambda^{numerical}$")
-    plt.legend()
+    fig, ax1 = plt.subplots()
+    fig.suptitle(r'$\lambda_n(E_n) = \frac{E_n}{E_0},\ E_0 = \frac{\hbar^2}{2mL^2}$')
+    ax1.set_xlabel(r'n')
+    ax1.set_ylabel(r"$\lambda_n$")
+    ln1 = ax1.plot(pb.nlist, ala, 'k-', label=r"$\lambda_n^{analytical}$")
+    ln2 = ax1.plot(pb.nlist, pb.la, 'r.', label=r"$\lambda_n^{numerical}$")
 
-    plt.figure()
-    plt.title("Error of lambda_n")
-    plt.plot(pb.nlist, ala-pb.la)
+    ax2 = ax1.twinx()
+    ax2.set_ylabel("$\lambda_n^{analytical} - \lambda_n^{numerical}$", color='g')
+    ax2.tick_params('y', colors='g')
+    ln3 = ax2.plot(pb.nlist, ala-pb.la, 'g--', label=r"Error")
+
+    lns = ln1 + ln2 + ln3
+    labs = [l.get_label() for l in lns]
+    ax1.legend(lns, labs)
+
+    fig.savefig("lambda_comparison.pdf")
+
 
 
 def wave_plot():
@@ -184,35 +191,43 @@ def wave_plot():
 
     apsi = np.empty((NUM_EIGVALS, pb.N), dtype=float) 
     for n in range(1, NUM_EIGVALS+1):
-        apsi[n-1] = np.sqrt(2) * np.sin(n*np.pi*pb.x)
+        apsi[n-1] = np.sqrt(2) * np.sin(n*np.pi*pb.x) * np.sign(pb.psi[1, n-1])
     
     plt.figure()
     plt.xlabel("x'")
-    plt.ylabel(r"$\psi$")
+    plt.ylabel(r"$\psi_n(x)$")
     for n in PLOT_RANGE:
         i = n - 1
         color = cmap(float(i)/NUM_EIGVALS)
-        plt.plot(pb.x, pb.psi[:,i], marker="x", c=color)
-        plt.plot(pb.x, apsi[i], label="E%s" % str(n), c=color)
-        plt.legend()
+        plt.plot(pb.x, pb.psi[:,i], marker=".", c=color)
+        plt.plot(pb.x, apsi[i], label=r"$E_%s$" % str(n), c=color)
+    plt.legend(title=r"$E_n$")
+    plt.savefig("wavefuncs.pdf")
 
 
-def error_plot(n_eigval):
+def error_plot():
     """
     Set 1st argument (n_eigval) to the eigenvalue you want to inspect the error of
     """
-    N_list = np.array(range(20, 201))
-    error = []
-    for n in N_list:
-        pb = ParticleBox(n, n_eigval)
-        psi = pb.psi[:, n_eigval-1]
-        apsi = np.sqrt(2) * np.sin(n_eigval*np.pi*pb.x) 
-        abs_err = np.abs(psi-apsi)
-        avg_err = np.sum(abs_err) / pb.N 
-        error.append(avg_err)
+    n_eigvals = [1,5,30]
+    N_list = np.array(range(50, 1000))
+    
     plt.figure()
-    plt.plot(N_list, error)
-
+    plt.title(r"Error = $\Delta x' \cdot \Sigma_{x_i}|\psi_{n,x_i}^{analytical} - \psi_{n,x_i}^{numerical}|$")
+    plt.xlabel(r"$N = 1/\Delta x'}$")
+    plt.ylabel("$\epsilon (N)$, error")
+    for n_eigval in n_eigvals:
+        error = []
+        for n in N_list:
+            pb = ParticleBox(n, n_eigval)
+            psi = pb.psi[:, n_eigval-1]
+            apsi = np.sqrt(2) * np.sin(n_eigval*np.pi*pb.x) * np.sign(psi[1])
+            abs_err = np.abs(psi-apsi)
+            avg_err = np.sum(abs_err) / pb.N 
+            error.append(avg_err)
+        plt.plot(N_list, error, label="(eigval) n = %d" % n_eigval)
+    plt.legend()
+    plt.savefig("psi_error.pdf")
 
 
 #### 2.5
@@ -255,8 +270,8 @@ def psi0_delta_test():
     Animates the time evolution of |psi|^2 with the initial wavefunction being a delta funciton
     """
     pb = ParticleBox()
-    alphas = pb.psi[pb.N//2, :]/np.sqrt(pb.NUM_EIGVALS)
-    animate(psi_at_time_box, pb, alphas, ymin=-20, ymax=20, tmax=1e-2)
+    alphas = pb.psi[pb.N//2, :] / np.sqrt(pb.N*pb.NUM_EIGVALS) 
+    animate(psi_at_time_box, pb, alphas, ymin=-0.5, ymax=0.5, tmax=2e-3)
 
 
 
@@ -277,8 +292,24 @@ def high_barrier():
     NUM_EIGVALS = 10 
     v0 = 1000
 
-    pb = ParticleBox(N=N, NUM_EIGVALS=NUM_EIGVALS, v0=v0)
+    pb = ParticleBox(NUM_EIGVALS=NUM_EIGVALS, v0=v0)
     
+    fig, ax1 = plt.subplots()
+    ax1.set_xlabel(r"x'")
+    ax1.set_ylabel(r"Re{$\psi$}")
+    ln1 = ax1.plot(pb.x, pb.psi.T[0].real, label=r"$\psi_1$")
+    ln2 = ax1.plot(pb.x, pb.psi.T[1].real, label=r"$\psi_2$")
+
+    ax2 = ax1.twinx()
+    ln3 = ax2.plot(pb.x, pb.V, label=r"$\nu (x)$;", color='y')
+    ax2.set_ylabel(r"$\nu (x)$")
+    ax2.tick_params('y', colors='y')
+
+    lns = ln1 + ln2 + ln3
+    labs = [l.get_label() for l in lns]
+    ax1.legend(lns, labs)
+
+
     plt.figure()
     for n, p in enumerate(pb.psi.T[0:2], start=1):
         plt.plot(pb.x, p.real, label=r"$\lambda_%s$" % str(n))
@@ -575,7 +606,8 @@ if __name__ == "__main__":
     ## 2.4
     # lambda_plot()
     # wave_plot()
-    # error_plot(3) # Number specifies which eigenfunction to plot the error for
+    
+    # error_plot() # Numbers specifies which eigenfunctions to plot the error for
 
     ## 2.5
     # alpha_print_test()
@@ -585,7 +617,7 @@ if __name__ == "__main__":
     # psi0_delta_test()
 
     ## 3.1
-    # high_barrier()
+    high_barrier()
     
     ## 3.2
     # root_finding()
@@ -601,7 +633,7 @@ if __name__ == "__main__":
     # calc_trans_amp() 
 
     ## 4.3
-    rabi_oscillations()
+    # rabi_oscillations()
 
     plt.show()
     
