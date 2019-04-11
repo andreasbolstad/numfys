@@ -1,12 +1,31 @@
-import numpy as np
-from numpy.lib.scimath import sqrt as csqrt
+"""
+File structure
+1. imports
+2. constants and global variables
+3. utility 
+4. calculation 
+5. plotting
+6. tasks and main program (select what to do)
+"""
 
-from scipy.special import jv # Bessel function, 1st kind
 
+# +-----------+
+# |1. Imports |
+# +-----------+
+
+import time
 from math import ceil
 
-def abs2(z):
-    return z.imag**2 + z.real**2
+import numpy as np
+from numpy.lib.scimath import sqrt as csqrt
+from scipy.special import jv # Bessel function, 1st kind
+
+import matplotlib.pyplot as plt
+
+
+# +---------------------------------+
+# |2. Constants and global variables|
+# +---------------------------------+
 
 wavelength = 1.0
 a = 3.5 * wavelength
@@ -15,38 +34,123 @@ zeta0 = 0.7 * wavelength
 omega_c = 2*np.pi / wavelength
 
 # G vector h-values
-# H = 10
-H = 4*ceil(omega_c)
+H = 10
+# H = 4*ceil(omega_c)
 print(H)
-h1 = np.arange(-H, H+1)
-h2 = np.arange(-H, H+1)
-h = np.array(np.meshgrid(h1,h2)).T.reshape(-1,2) # All combinations of h1 and h2, last index changing fastest
-hlength = 2*H+1
+h = np.arange(-H, H+1)
+hlen = 2*H+1
+h2len = hlen**2
 
-theta0 = 0
-psi0 = 0
-k = omega_c * np.sin(theta0) * np.array([np.cos(psi0), np.sin(psi0)])
-alpha0_k = omega_c * np.cos(theta0)
 
-def calc_I_hat(z, h):
-    return (-1j)**(h[:,0]+h[:,1]) * jv(h[:,0], z) * jv(h[:,1], z)
 
-I_hat_right = -calc_I_hat(alpha0_k*zeta0/2, h)
+# +----------+
+# |3. Utility|
+# +----------+
 
-def calc_alpha0_K(k, h):
-    G = h * b
-    K = k + G
-    return csqrt(omega_c**2 - np.sum(K**2, axis=-1))
+def abs2(z):
+    """
+    Function: Compute absolute squared of a complex number
+    z: complex np.array or number
+    """
+    return z.imag**2 + z.real**2
 
-shape = I_hat_right.shape[0]
-I_hat_left = np.zeros((shape, shape), dtype=np.complex128)
-alpha0_K = np.zeros(hlength**2, dtype=np.complex128)
-for i, h_marked in enumerate(h):
-    alpha0_Kmarked = calc_alpha0_K(k, h_marked)
-    alpha0_K[i] = alpha0_Kmarked # For later use
-    h_diff = h - h_marked
-    I_hat_left[:,i] = calc_I_hat( - alpha0_Kmarked * zeta0/2, h_diff)
 
-r_K = np.linalg.solve(I_hat_left, I_hat_right)
-e_K = alpha0_K.real * abs2(r_K) / alpha0_k
-print(np.sum(e_K))
+
+# +---------------+
+# |4. Calculations|
+# +---------------+
+
+def calc_I_hat(z, h1, h2):
+    return (-1j)**(h1+h2) * jv(h1, z) * jv(h2, z)
+
+
+def flat_dirichlet(theta0, psi0, zeta0):
+
+    k1 = omega_c * np.sin(theta0) * np.cos(psi0)
+    k2 = omega_c * np.sin(theta0) * np.sin(psi0)
+
+    alpha0_k = omega_c * np.cos(theta0)
+
+    gamma_right = alpha0_k*zeta0/2
+    I_hat_right = calc_I_hat(gamma_right, h, h[:, np.newaxis])
+
+    G_marked = h * b 
+    K1_marked = k1 + G_marked
+    K2_marked = k2 + G_marked
+
+    K_marked_squared = K1_marked**2 + (K2_marked**2)[:, np.newaxis]
+    alpha0_Kmarked = csqrt(omega_c**2 - K_marked_squared )
+    
+    h_marked = h[:, np.newaxis]
+    h1_diff = h - h_marked 
+    h2_diff = h - h_marked
+
+    gamma_left =  -alpha0_Kmarked * zeta0/2
+    I_hat_left = calc_I_hat(
+            gamma_left, # 0 1
+            h1_diff[np.newaxis, :, np.newaxis, :], # 0, 2
+            h2_diff[:, np.newaxis, :, np.newaxis]) # 1, 3 
+
+    lhs = I_hat_left.reshape(h2len, h2len) # dim 0 1 -> 0; 2 3 -> 1
+    rhs = -I_hat_right.reshape(h2len) # dim 0 1 -> 0
+    r_K = np.linalg.solve(lhs, rhs)
+
+    e_K = alpha0_Kmarked.reshape(h2len) / alpha0_k * abs2(r_K) 
+
+    # U = np.sum(e_K.real)
+    # print("err U =", U-1)
+
+    kk_index = (h2len - 1) // 2
+    R = e_K[kk_index].real
+
+    return R
+
+
+
+# +-----------+
+# |5. Plotting|
+# +-----------+
+
+
+
+# +-------+
+# |6. Main|
+# +-------+
+
+def task1():
+    zeta0 = 0.7
+    psi0 = 0
+    N = 1000
+    theta_grads = np.linspace(0, 90, N, endpoint=False) 
+    theta_list = theta_grads * np.pi / 180 
+
+    R = np.zeros(N)
+    for i, theta0 in enumerate(theta_list):
+        R[i] = flat_dirichlet(theta0, psi0, zeta0)
+
+    plt.figure()
+    plt.semilogy(theta_grads, R)
+    plt.show()
+        
+
+def task2():
+    zeta0_list = np.linspace(0, 1, 10)
+    for zeta0 in zeta0_list: 
+        test_dirichlet()
+
+
+if __name__ == "__main__":
+
+    selected_options = [1]
+
+    options = {
+            1: "task1",
+            2: "task2",
+            3: "task3",
+            }
+
+    selected = [options[i] for i in selected_options]
+    
+    if "task1" in selected:
+        task1()
+    
