@@ -34,8 +34,8 @@ zeta0 = 0.7 * wavelength
 omega_c = 2*np.pi / wavelength
 
 # G vector h-values
-H = 10
-# H = 4*ceil(omega_c)
+# H = 10
+H = ceil(omega_c)
 print(H)
 h = np.arange(-H, H+1)
 hlen = 2*H+1
@@ -64,7 +64,7 @@ def calc_I_hat(z, h1, h2):
     return (-1j)**(h1+h2) * jv(h1, z) * jv(h2, z)
 
 
-def flat_dirichlet(theta0, psi0, zeta0):
+def calc_dirichlet(theta0, psi0, zeta0):
 
     k1 = omega_c * np.sin(theta0) * np.cos(psi0)
     k2 = omega_c * np.sin(theta0) * np.sin(psi0)
@@ -97,13 +97,7 @@ def flat_dirichlet(theta0, psi0, zeta0):
 
     e_K = alpha0_Kmarked.reshape(h2len) / alpha0_k * abs2(r_K) 
 
-    # U = np.sum(e_K.real)
-    # print("err U =", U-1)
-
-    kk_index = (h2len - 1) // 2
-    R = e_K[kk_index].real
-
-    return R
+    return e_K
 
 
 
@@ -118,15 +112,20 @@ def flat_dirichlet(theta0, psi0, zeta0):
 # +-------+
 
 def task1():
+    """
+    No particular implementation, just testing
+    """
     zeta0 = 0.7
-    psi0 = 0
-    N = 1000
+    psi0 = 1 
+    N = 100
     theta_grads = np.linspace(0, 90, N, endpoint=False) 
     theta_list = theta_grads * np.pi / 180 
 
     R = np.zeros(N)
     for i, theta0 in enumerate(theta_list):
-        R[i] = flat_dirichlet(theta0, psi0, zeta0)
+        e_K = calc_dirichlet(theta0, psi0, zeta0)
+        kk_index = (h2len - 1) // 2
+        R[i] = e_K[kk_index].real
 
     plt.figure()
     plt.semilogy(theta_grads, R)
@@ -134,14 +133,27 @@ def task1():
         
 
 def task2():
-    zeta0_list = np.linspace(0, 1, 10)
-    for zeta0 in zeta0_list: 
-        test_dirichlet()
+    """
+    How U varies as a function of zeta0
+    """
+    theta0 = 0
+    psi0 = 0
+
+    N = 1000
+    zeta0_list = np.linspace(0, 1, N)
+    U = np.zeros(N)
+    for i, zeta0 in enumerate(zeta0_list): 
+        if i % 10 == 0: print(i, "/", N)
+        e_K = calc_dirichlet(theta0, psi0, zeta0)
+        U[i] = np.sum(e_K.real)
+    plt.figure()
+    plt.semilogy(zeta0_list, 1-U)
+    plt.show()
 
 
 if __name__ == "__main__":
 
-    selected_options = [1]
+    selected_options = [2]
 
     options = {
             1: "task1",
@@ -153,4 +165,7 @@ if __name__ == "__main__":
     
     if "task1" in selected:
         task1()
+
+    if "task2" in selected:
+        task2()
     
