@@ -4,8 +4,8 @@ File structure
 2. constants and global variables
 3. utility 
 4. calculation 
-5. plotting
-6. tasks and main program (select what to do)
+5. plotting (assignment tasks mostly)
+6. main program (select what to do)
 """
 
 
@@ -21,6 +21,21 @@ from numpy.lib.scimath import sqrt as csqrt
 from scipy.special import jv # Bessel function, 1st kind
 
 import matplotlib.pyplot as plt
+from matplotlib import rc, ticker
+
+
+def presetup():
+    plt.subplots_adjust(wspace=0, hspace=0)
+
+
+def postsetup(ax):
+    ax.autoscale(tight=True)
+    ax.tick_params(direction='in', which='both')
+    start, end = ax.get_ylim()
+    ax.yaxis.set_ticks(np.arange(0, end, float('%.2f' % (end/4))))
+    ax.xaxis.set_major_formatter(ticker.FormatStrFormatter('%0.1f'))
+    plt.setp(ax.get_yticklabels()[-1], visible=False)
+
 
 
 # +---------------------------------+
@@ -34,7 +49,7 @@ omega_c = 2*np.pi / wavelength
 
 # G vector h-values
 H = 10
-# H = 3*ceil(omega_c)
+# H = 2*ceil(omega_c)
 print(H)
 h = np.arange(-H, H+1)
 hlen = 2*H+1
@@ -139,12 +154,6 @@ def calc_periodic_rayleigh(theta0, psi0, zeta0, surface="dir"):
 # |5. Plotting|
 # +-----------+
 
-
-
-# +-------+
-# |6. Main|
-# +-------+
-
 def task1():
     """
     No particular implementation, miscellaneous testing
@@ -185,15 +194,73 @@ def task2():
     plt.show()
 
 
+def fig1and2():
+    zeta0_list = np.array([0.3, 0.5, 0.7]) * wavelength
+    psi0 = np.pi / 4 
+    N = 100
+    theta_grads = np.linspace(0, 90, N, endpoint=False) 
+    theta_list = theta_grads * np.pi / 180 
+
+    R = np.zeros(N)
+    
+    fig, axes = plt.subplots(3, sharex=True, sharey=True)
+    presetup()
+    for i, zeta0 in enumerate(zeta0_list):
+
+        for j, theta0 in enumerate(theta_list):
+            e_K = calc_periodic_rayleigh(theta0, psi0, zeta0, surface="neu")
+            kk_index = (h2len - 1) // 2
+            R[j] = e_K[kk_index].real
+
+        axes[i].semilogy(theta_grads, R, label=r"$\zeta_0$ = % .1f" % zeta0)
+        axes[i].legend()
+        postsetup(axes[i])
+
+    plt.show()
+    
+
+def fig4():
+    zeta0 = 0.5 * wavelength
+    psi0 = 0
+    N = 100
+    theta_grads = np.linspace(0, 90, N, endpoint=False) 
+    theta_list = theta_grads * np.pi / 180 
+
+    ekg = np.zeros((6, N))
+    idx00 = (h2len - 1) // 2
+    indices = [idx00, idx00+hlen, idx00-hlen, idx00+1, idx00+hlen+1, idx00-hlen-1]
+    
+    fig, axes = plt.subplots(6, figsize=(6,12), sharex=True)
+    presetup()
+    for i, theta0 in enumerate(theta_list):
+        e_K = calc_periodic_rayleigh(theta0, psi0, zeta0, surface="neu")
+        for j, idx in enumerate(indices):
+            ekg[j,i] = e_K[idx].real
+
+    for i, idx in enumerate(indices):
+        axes[i].plot(theta_grads, ekg[i])
+        postsetup(axes[i])
+
+    plt.show()
+
+
+def task3():
+    # fig1and2()
+    fig4()
+
+# +-------+
+# |6. Main|
+# +-------+
+
 if __name__ == "__main__":
 
-    selected_options = [1]
+    selected_options = [3]
 
     options = {
-            1: "task1",
-            2: "task2",
-            3: "task3",
-            }
+        1: "task1",
+        2: "task2",
+        3: "task3",
+    }
 
     selected = [options[i] for i in selected_options]
     
@@ -203,3 +270,7 @@ if __name__ == "__main__":
     if "task2" in selected:
         task2()
     
+    if "task3" in selected:
+        task3()
+
+
