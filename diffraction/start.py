@@ -24,19 +24,6 @@ import matplotlib.pyplot as plt
 from matplotlib import rc, ticker
 
 
-def presetup():
-    plt.subplots_adjust(wspace=0, hspace=0)
-
-
-def postsetup(ax):
-    ax.autoscale(tight=True)
-    ax.tick_params(direction='in', which='both')
-    start, end = ax.get_ylim()
-    ax.yaxis.set_ticks(np.arange(0, end, float('%.2f' % (end/4))))
-    ax.xaxis.set_major_formatter(ticker.FormatStrFormatter('%0.1f'))
-    plt.setp(ax.get_yticklabels()[-1], visible=False)
-
-
 
 # +---------------------------------+
 # |2. Constants and global variables|
@@ -154,6 +141,20 @@ def calc_periodic_rayleigh(theta0, psi0, zeta0, surface="dir"):
 # |5. Plotting|
 # +-----------+
 
+# Plotting settings
+def presetup():
+    plt.subplots_adjust(wspace=0, hspace=0)
+
+#Plotting settings
+def postsetup(ax):
+    ax.autoscale(tight=True)
+    ax.tick_params(direction='in', which='both')
+    start, end = ax.get_ylim()
+    sep = float('%.2f' % (end/4))
+    ax.yaxis.set_ticks(np.arange(0, end-sep*0.5, sep))
+    ax.xaxis.set_major_formatter(ticker.FormatStrFormatter('%0.1f'))
+
+
 def task1():
     """
     No particular implementation, miscellaneous testing
@@ -194,7 +195,7 @@ def task2():
     plt.show()
 
 
-def fig1and2():
+def task3a():
     zeta0_list = np.array([0.3, 0.5, 0.7]) * wavelength
     psi0 = np.pi / 4 
     N = 100
@@ -214,12 +215,12 @@ def fig1and2():
 
         axes[i].semilogy(theta_grads, R, label=r"$\zeta_0$ = % .1f" % zeta0)
         axes[i].legend()
-        postsetup(axes[i])
+        axes[i].autoscale(tight=True)
 
     plt.show()
     
 
-def fig4():
+def task3b():
     zeta0 = 0.5 * wavelength
     psi0 = 0
     N = 100
@@ -228,6 +229,7 @@ def fig4():
 
     ekg = np.zeros((6, N))
     idx00 = (h2len - 1) // 2
+    # (0,0), (1,0), (-1,0), (0,pm1), (1,pm1), (-1,pm1)
     indices = [idx00, idx00+hlen, idx00-hlen, idx00+1, idx00+hlen+1, idx00-hlen-1]
     
     fig, axes = plt.subplots(6, figsize=(6,12), sharex=True)
@@ -244,9 +246,11 @@ def fig4():
     plt.show()
 
 
-def task3():
-    # fig1and2()
-    fig4()
+
+def task4():
+    pass
+
+
 
 # +-------+
 # |6. Main|
@@ -254,12 +258,13 @@ def task3():
 
 if __name__ == "__main__":
 
-    selected_options = [3]
+    selected_options = [4]
 
     options = {
         1: "task1",
         2: "task2",
-        3: "task3",
+        3: "task3a",
+        4: "task3b",
     }
 
     selected = [options[i] for i in selected_options]
@@ -270,7 +275,9 @@ if __name__ == "__main__":
     if "task2" in selected:
         task2()
     
-    if "task3" in selected:
-        task3()
+    if "task3a" in selected:
+        task3a()
 
+    if "task3b" in selected:
+        task3b()
 
