@@ -35,7 +35,7 @@ wavelength = 1.0
 omega_c = 2*np.pi / wavelength
 
 # G vector h-values
-H = 25
+H = 10
 # H = 2*ceil(omega_c)
 print(H)
 h = np.arange(-H, H+1)
@@ -206,7 +206,7 @@ def calc_rayleigh(a, b,theta0, psi0, zeta0, surface="dir", func="dpcos", **fargs
     h1_diff = h - h_marked 
     h2_diff = h - h_marked
 
-    gamma_left =  -alpha0_Kmarked
+    gamma_left =  -alpha0_Kmarked * zeta0 * 0.5
     I_hat_left = calc_Ihat_func( a, b, gamma_left, zeta0,
             h1_diff[:, np.newaxis, :, np.newaxis], # 1st and 3rd
             h2_diff[np.newaxis, :, np.newaxis, :], # 2nd and 4th
