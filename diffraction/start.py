@@ -70,13 +70,13 @@ def calc_Ihat_dpc(gamma, zeta0, h1, h2):
 
 
 def calc_Ihat_tcone(gamma, zeta0, h1, h2, **kwargs):
-    nfacs = 4 # Number of factors in sum, 3rd term in eq. 59
+    nfacs = 7 # Number of factors in sum, 3rd term in eq. 59
     pb = kwargs["pb"]
     pt = kwargs["pt"]
     G = np.sqrt(h1**2 + h2**2) * (2*np.pi / a)
 
     ##################
-    # Pre gamma (calculations independent of gamma)
+    # Pre gamma (calculations independent of gamma, and zeta0!)
 
     # Static storage / cache
     if 'dims' not in calc_Ihat_tcone.__dict__:
@@ -94,7 +94,7 @@ def calc_Ihat_tcone(gamma, zeta0, h1, h2, **kwargs):
         # 3
         pregamma_term3 = np.zeros((nfacs, *G.shape), dtype=float)
         quad_array = np.vectorize(lambda Gx: quad(lambda x: (pb-(pb-pt)*x) * jv(0, Gx*(pb-(pb-pt)*x)) * x**n , 0, 1)[0])
-        for i, n in enumerate(np.arange(1, nfacs)):
+        for i, n in enumerate(np.arange(1, nfacs+1)):
             pregamma_term3[i] = quad_array(G) / factorial(n)
         pregamma_term3 *= 2 * np.pi * (pb-pt)/(a*a)
         
@@ -115,15 +115,47 @@ def calc_Ihat_tcone(gamma, zeta0, h1, h2, **kwargs):
 
     # 3
     postgamma_term3 = np.zeros_like(pregamma_term3, dtype=np.complex_)
-    for i, n in enumerate(np.arange(1, nfacs)):
+    for i, n in enumerate(np.arange(1, nfacs+1)):
         postgamma_term3[i] = (-1j*gamma*zeta0)**n
     term3 = np.sum(pregamma_term3 * postgamma_term3, axis=0)
+    print(term3.dtype)
 
     return term1 + term2 + term3
 
 
-def calc_Ihat_tcos():
-    pass
+def calc_Ihat_tcos(gamma, zeta0, h1, h2, **kwargs):
+    nfacs = 7
+    p0 = kwargs["p0"]
+    G = np.sqrt(h1**2 + h2**2) * (2*np.pi / a)
+    
+    ##################
+    # Pre gamma (calculations independent of gamma, and zeta0!)
+
+    # Static storage / cache
+    if 'dims' not in calc_Ihat_tcos.__dict__:
+        calc_Ihat_tcos.dims = []
+        calc_Ihat_tcos.cache = dict()
+    
+    dim = len(h1.shape)
+    if dim not in calc_Ihat_tcos.dims:
+        calc_Ihat_tcos.dims.append(dim)
+        
+        pregamma = np.zeros((nfacs, *G.shape), dtype=float)
+        for i, n in enumerate(np.arange(1, nfacs+1)):
+            quad_array = np.vectorize( lambda Gx: quad(lambda x: x*jv(0, Gx*x)*(zeta0*np.cos(0.5*np.pi*x/p0))**n, 0, p0)[0] ) 
+            pregamma[i] = quad_array(G) * 2*np.pi / a**2 / factorial(n)
+       
+        calc_Ihat_tcos.cache[dim] = pregamma
+
+    else:
+        pregamma = calc_Ihat_tcos.cache[dim]
+
+    postgamma = np.zeros_like(pregamma, dtype=np.complex_)
+    for i, n in enumerate(np.arange(1, nfacs+1)):
+        postgamma[i] = (-1j*gamma)**n
+
+    return np.where(G == 0, 1, 0) + np.sum(pregamma * postgamma, axis=0)
+
 
 
 def calc_rayleigh(theta0, psi0, zeta0, surface="dir", func="dpcos", **fargs):
@@ -256,11 +288,11 @@ def task2():
     psi0 = 0
 
     N = 100
-    zeta0_list = np.linspace(0, 1, N)
+    zeta0_list = np.linspace(0.2, 1, N)
     U = np.zeros(N)
     for i, zeta0 in enumerate(zeta0_list): 
-        if i % 10 == 0: print(i, "/", N)
-        e_K = calc_rayleigh(theta0, psi0, zeta0, surface="neu")
+        print(i, "/", N)
+        e_K = calc_rayleigh(theta0, psi0, zeta0, surface="neu", func="tcone", pb=a/4, pt=a/8)
         U[i] = np.sum(e_K.real)
     plt.figure()
     plt.semilogy(zeta0_list, 1-U)
@@ -329,13 +361,15 @@ def task4():
     ekg = np.zeros((6, N))
     idx00 = (h2len - 1) // 2 # Center of hlist, where h1=h2=0
     # (0,0), (1,0), (-1,0), (0,pm1), (1,pm1), (-1,pm1)
-    indices = [idx00, idx00+hlen, idx00-hlen, idx00+2*hlen, idx00-2*hlen, idx00+3*hlen, idx00-3*hlen]
+    indices = [idx00, idx00+hlen, idx00-hlen, idx00+2*hlen, idx00-2*hlen, idx00+3*hlen]
     
     fig, axes = plt.subplots(6, figsize=(6,12), sharex=True)
     presetup()
     for i, theta0 in enumerate(theta_list):
-        print(i)
-        e_K = calc_rayleigh(theta0, psi0, zeta0, surface="neu", func="tcone", pb=a/4, pt=a/8)
+        print("%d / %d" % (i, N) )
+        # e_K = calc_rayleigh(theta0, psi0, zeta0, surface="neu", func="dpcos")
+        # e_K = calc_rayleigh(theta0, psi0, zeta0, surface="neu", func="tcone", pb=a/4, pt=a/8)
+        e_K = calc_rayleigh(theta0, psi0, zeta0, surface="neu", func="tcos", p0=a/4)
         for j, idx in enumerate(indices):
             ekg[j,i] = e_K[idx].real
 
