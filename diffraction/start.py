@@ -32,12 +32,10 @@ from matplotlib import ticker
 # +---------------------------------+
 
 wavelength = 1.0
-a = 3.5 * wavelength
-b = 2*np.pi / a
 omega_c = 2*np.pi / wavelength
 
 # G vector h-values
-H = 10
+H = 25
 # H = 2*ceil(omega_c)
 print(H)
 h = np.arange(-H, H+1)
@@ -63,13 +61,13 @@ def abs2(z):
 # |4. Calculations|
 # +---------------+
 
-def calc_Ihat_dpc(gamma, zeta0, h1, h2):
+def calc_Ihat_dpc(a, b, gamma, zeta0, h1, h2):
     """Doubly periodic cosine"""
     z = gamma * zeta0 / 2
     return (-1j)**(h1+h2) * jv(h1, z) * jv(h2, z)
 
 
-def calc_Ihat_tcone(gamma, zeta0, h1, h2, **kwargs):
+def calc_Ihat_tcone(a, b, gamma, zeta0, h1, h2, **kwargs):
     nfacs = 7 # Number of factors in sum, 3rd term in eq. 59
     pb = kwargs["pb"]
     pt = kwargs["pt"]
@@ -123,7 +121,7 @@ def calc_Ihat_tcone(gamma, zeta0, h1, h2, **kwargs):
     return term1 + term2 + term3
 
 
-def calc_Ihat_tcos(gamma, zeta0, h1, h2, **kwargs):
+def calc_Ihat_tcos(a, b, gamma, zeta0, h1, h2, **kwargs):
     nfacs = 7
     p0 = kwargs["p0"]
     G = np.sqrt(h1**2 + h2**2) * (2*np.pi / a)
@@ -158,7 +156,7 @@ def calc_Ihat_tcos(gamma, zeta0, h1, h2, **kwargs):
 
 
 
-def calc_rayleigh(theta0, psi0, zeta0, surface="dir", func="dpcos", **fargs):
+def calc_rayleigh(a, b,theta0, psi0, zeta0, surface="dir", func="dpcos", **fargs):
     """
     The following code can be a bit tricky to follow.
     Keep in mind that when a matrix is multiplied with a lower dimensional matrix with *, 
@@ -193,7 +191,7 @@ def calc_rayleigh(theta0, psi0, zeta0, surface="dir", func="dpcos", **fargs):
     alpha0_k = omega_c * np.cos(theta0)
 
     gamma_right = alpha0_k*zeta0/2
-    I_hat_right = calc_Ihat_func(gamma_right, zeta0, h, h[:, np.newaxis], **fargs)
+    I_hat_right = calc_Ihat_func(a, b, gamma_right, zeta0, h, h[:, np.newaxis], **fargs)
 
 
     G = h * b # only one axis, i.e. corresponds to G1 or G2 (both) 
@@ -209,9 +207,7 @@ def calc_rayleigh(theta0, psi0, zeta0, surface="dir", func="dpcos", **fargs):
     h2_diff = h - h_marked
 
     gamma_left =  -alpha0_Kmarked
-    I_hat_left = calc_Ihat_func(
-            gamma_left,
-            zeta0,
+    I_hat_left = calc_Ihat_func( a, b, gamma_left, zeta0,
             h1_diff[:, np.newaxis, :, np.newaxis], # 1st and 3rd
             h2_diff[np.newaxis, :, np.newaxis, :], # 2nd and 4th
             **fargs)
@@ -259,10 +255,41 @@ def postsetup(ax):
     ax.xaxis.set_major_formatter(ticker.FormatStrFormatter('%0.1f'))
 
 
+
+def toggleplot(fig, lines, leg):
+    leg.get_frame().set_alpha(0.4)
+    # we will set up a dict mapping legend line to orig line, and enable
+    # picking on the legend line
+    lined = dict()
+    for legline, origline in zip(leg.get_lines(), lines):
+        legline.set_picker(5)  # 5 pts tolerance
+        lined[legline] = origline
+
+    def onpick(event):
+        # on the pick event, find the orig line corresponding to the
+        # legend proxy line, and toggle the visibility
+        legline = event.artist
+        origline = lined[legline]
+        vis = not origline.get_visible()
+        origline.set_visible(vis)
+        # Change the alpha on the line in the legend so we can see what lines
+        # have been toggled
+        if vis:
+            legline.set_alpha(1.0)
+        else:
+            legline.set_alpha(0.2)
+        fig.canvas.draw()
+
+    fig.canvas.mpl_connect('pick_event', onpick)
+
+
+
 def task1():
     """
     No particular implementation, miscellaneous testing
     """
+    a = 3.5 * wavelength
+    b = 2*np.pi / a
     zeta0 = 0.5 * wavelength
     psi0 = 0 #np.pi / 4 
     N = 100
@@ -271,13 +298,12 @@ def task1():
 
     R = np.zeros(N)
     for i, theta0 in enumerate(theta_list):
-        e_K = calc_rayleigh(theta0, psi0, zeta0, surface="neu")
+        e_K = calc_rayleigh(a,b, theta0, psi0, zeta0, surface="neu")
         kk_index = (h2len - 1) // 2
         R[i] = e_K[kk_index].real
 
     plt.figure()
     plt.semilogy(theta_grads, R)
-    plt.show()
         
 
 def task2():
@@ -287,19 +313,29 @@ def task2():
     theta0 = 0
     psi0 = 0
 
-    N = 100
-    zeta0_list = np.linspace(0.2, 1, N)
+    N = 50
+    zeta0_list = np.linspace(0, 1, N)
     U = np.zeros(N)
-    for i, zeta0 in enumerate(zeta0_list): 
-        print(i, "/", N)
-        e_K = calc_rayleigh(theta0, psi0, zeta0, surface="neu", func="tcone", pb=a/4, pt=a/8)
-        U[i] = np.sum(e_K.real)
-    plt.figure()
-    plt.semilogy(zeta0_list, 1-U)
-    plt.show()
+
+    fig, ax = plt.subplots()
+    ax.set_title("Numerical error in conservation of energy U")
+    # for a in [0.5 * wavelength, 3.5 * wavelength]:
+    for a in [3.5]:
+        b = 2*np.pi / a
+        # for surface in ["dir", "neu"]:
+        for surface in ["neu"]:
+            for i, zeta0 in enumerate(zeta0_list): 
+                print(i, "/", N)
+                e_K = calc_rayleigh(a, b,theta0, psi0, zeta0, surface=surface)
+                U[i] = np.sum(np.where(e_K.imag == 0, e_K.real, 0))
+            result = np.abs(1-U)
+            line, = ax.semilogy(zeta0_list, result, linestyle="", marker=".", label="a = %.1f, surface = %s" % (a, surface))
+    leg = ax.legend(fancybox=True, shadow=True)
 
 
 def task3a():
+    a = 3.5 * wavelength
+    b = 2*np.pi / a
     zeta0_list = np.array([0.3, 0.5, 0.7]) * wavelength
     psi0 = np.pi / 4 
     N = 100
@@ -313,7 +349,7 @@ def task3a():
     for i, zeta0 in enumerate(zeta0_list):
 
         for j, theta0 in enumerate(theta_list):
-            e_K = calc_rayleigh(theta0, psi0, zeta0, surface="neu")
+            e_K = calc_rayleigh(a, b,theta0, psi0, zeta0, surface="neu")
             kk_index = (h2len - 1) // 2
             R[j] = e_K[kk_index].real
 
@@ -321,10 +357,10 @@ def task3a():
         axes[i].legend()
         axes[i].autoscale(tight=True)
 
-    plt.show()
-    
 
 def task3b():
+    a = 3.5 * wavelength
+    b = 2*np.pi / a
     zeta0 = 0.5 * wavelength
     psi0 = 0
     N = 100
@@ -339,7 +375,7 @@ def task3b():
     fig, axes = plt.subplots(6, figsize=(6,12), sharex=True)
     presetup()
     for i, theta0 in enumerate(theta_list):
-        e_K = calc_rayleigh(theta0, psi0, zeta0, surface="neu")
+        e_K = calc_rayleigh(a, b,theta0, psi0, zeta0, surface="neu")
         for j, idx in enumerate(indices):
             ekg[j,i] = e_K[idx].real
 
@@ -347,11 +383,10 @@ def task3b():
         axes[i].plot(theta_grads, ekg[i])
         postsetup(axes[i])
 
-    plt.show()
-
-
 
 def task4():
+    a = 3.5 * wavelength
+    b = 2*np.pi / a
     zeta0 = 0.1 * wavelength
     psi0 = 0
     N = 500
@@ -367,17 +402,15 @@ def task4():
     presetup()
     for i, theta0 in enumerate(theta_list):
         print("%d / %d" % (i, N) )
-        # e_K = calc_rayleigh(theta0, psi0, zeta0, surface="neu", func="dpcos")
-        # e_K = calc_rayleigh(theta0, psi0, zeta0, surface="neu", func="tcone", pb=a/4, pt=a/8)
-        e_K = calc_rayleigh(theta0, psi0, zeta0, surface="neu", func="tcos", p0=a/4)
+        # e_K = calc_rayleigh(a, b,theta0, psi0, zeta0, surface="neu", func="dpcos")
+        # e_K = calc_rayleigh(a, b,theta0, psi0, zeta0, surface="neu", func="tcone", pb=a/4, pt=a/8)
+        e_K = calc_rayleigh(a, b,theta0, psi0, zeta0, surface="neu", func="tcos", p0=a/4)
         for j, idx in enumerate(indices):
             ekg[j,i] = e_K[idx].real
 
     for i, idx in enumerate(indices):
         axes[i].plot(theta_grads, ekg[i])
         # postsetup(axes[i])
-
-    plt.show()
 
 
 # +-------+
@@ -386,7 +419,7 @@ def task4():
 
 if __name__ == "__main__":
 
-    selected_options = [5]
+    selected_options = [2]
 
     options = {
         1: "task1",
@@ -412,4 +445,7 @@ if __name__ == "__main__":
 
     if "task4" in selected:
         task4()
+
+    plt.show()
+
 
