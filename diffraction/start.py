@@ -237,6 +237,27 @@ def calc_rayleigh(a, b,theta0, phi0, zeta0, surface="dir", func="dpcos", **fargs
     return e_K
 
 
+def calc_anomalies(a, phi0):
+    khat = np.array([np.cos(phi0), np.sin(phi0)])
+    x1 = (h*khat[0] + (h*khat[1])[:, np.newaxis]) / a 
+    # print(x1)
+    x2 = (h/a)**2
+    x3 = x1**2 - (x2 + x2[:, np.newaxis]) + 1
+
+    # mask = np.where(x3 > 0, True, False)
+
+    minuspart = -x1 - csqrt(x3)
+    pluspart =  -x1 + csqrt(x3)
+    # print(sin_theta0)
+    anomaly_theta0 = []
+    for item in minuspart.flatten():
+        if item.imag == 0 and 0 < item.real < np.pi/2:
+            anomaly_theta0.append(item)
+    for item in pluspart.flatten():
+        if item.imag == 0 and 0 < item.real < np.pi/2:
+            anomaly_theta0.append(item)
+    return np.arcsin(np.array(anomaly_theta0)) * 180 / np.pi
+
 
 # +-----------------------+
 # |5. Plotting and results|
@@ -346,29 +367,8 @@ def task3a():
     theta_grads = np.linspace(0, 90, N, endpoint=False) 
     theta_list = theta_grads * np.pi / 180 
 
-
-    ### Anomalies
-    khat = np.array([np.cos(phi0), np.sin(phi0)])
-    x1 = (h*khat[0] + (h*khat[1])[:, np.newaxis]) / a 
-    # print(x1)
-    x2 = (h/a)**2
-    x3 = x1**2 - (x2 + x2[:, np.newaxis]) + 1
-
-    # mask = np.where(x3 > 0, True, False)
-
-    minuspart = -x1 - csqrt(x3)
-    pluspart =  -x1 + csqrt(x3)
-    # print(sin_theta0)
-    anomaly_theta0 = []
-    for item in minuspart.flatten():
-        if item.imag == 0 and 0 < item.real < np.pi/2:
-            anomaly_theta0.append(item)
-    for item in pluspart.flatten():
-        if item.imag == 0 and 0 < item.real < np.pi/2:
-            anomaly_theta0.append(item)
-    t0s = np.arcsin(np.array(anomaly_theta0)) * 180 / np.pi
-    ######
-
+    t0s = calc_anomalies(a, phi0)
+    
     R = np.zeros(N)
     fig, axes = plt.subplots(3, sharex=True, sharey=True)
     # presetup()
@@ -388,7 +388,7 @@ def task3a():
         for theta in t0s:
             axes[i].axvline(theta, linestyle='--', alpha=0.1, color='k', lw=0.8)
     axes[-1].set_xlabel(r"$\theta_0, deg$")
-    fig.savefig("figures/reflectivity_phi%45.pdf") 
+    fig.savefig("figures/reflectivity_phi45.pdf") 
 
 
 def task3b():
@@ -412,12 +412,16 @@ def task3b():
         for j, idx in enumerate(indices):
             ekg[j,i] = e_K[idx].real
 
-    labels = ["h = {0, 0}", "h = {1, 0}", "h = {-1, 0}", "h = {0, 1}",]
+    t0s = calc_anomalies(a, phi0)
 
+    labels = ["h = {0, 0}", "h = {1, 0}", "h = {-1, 0}", "h = {0, ±1}", "h = {1, ±1}", "h = {-1, ±1}"]
     for i, idx in enumerate(indices):
-        axes[i].plot(theta_grads, ekg[i])
-        # axes[i].
+        axes[i].plot(theta_grads, ekg[i], label=labels[i])
+        for theta in t0s:
+            axes[i].axvline(theta, linestyle='--', alpha=0.1, color='k', lw=0.8)
+        axes[i].legend()
         postsetup(axes[i])
+    fig.savefig("figures/efficiencies.pdf")
 
 
 def task4():
@@ -455,7 +459,7 @@ def task4():
 
 if __name__ == "__main__":
 
-    selected_options = [3]
+    selected_options = [4]
 
     options = {
         1: "task1",
