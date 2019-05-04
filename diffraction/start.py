@@ -35,7 +35,8 @@ wavelength = 1.0
 omega_c = 2*np.pi / wavelength
 
 # G vector h-values
-H = 10
+H = 14
+# H = 14
 # H = 2*ceil(omega_c)
 print(H)
 h = np.arange(-H, H+1)
@@ -313,24 +314,27 @@ def task2():
     theta0 = 0
     psi0 = 0
 
-    N = 50
+    N = 100
     zeta0_list = np.linspace(0, 1, N)
     U = np.zeros(N)
 
     fig, ax = plt.subplots()
-    ax.set_title("Numerical error in conservation of energy U")
-    # for a in [0.5 * wavelength, 3.5 * wavelength]:
-    for a in [3.5]:
+    ax.set_title("Error in conservation of energy")
+    ax.set_xlabel(r"$\zeta_0 / \lambda$")
+    ax.set_ylabel("|1-U|")
+    for a in [0.5 * wavelength, 3.5 * wavelength]:
+    # for a in [3.5]:
         b = 2*np.pi / a
-        # for surface in ["dir", "neu"]:
-        for surface in ["neu"]:
+        for surface in ["dir", "neu"]:
+        # for surface in ["neu"]:
             for i, zeta0 in enumerate(zeta0_list): 
                 print(i, "/", N)
                 e_K = calc_rayleigh(a, b,theta0, psi0, zeta0, surface=surface)
                 U[i] = np.sum(np.where(e_K.imag == 0, e_K.real, 0))
             result = np.abs(1-U)
-            line, = ax.semilogy(zeta0_list, result, linestyle="", marker=".", label="a = %.1f, surface = %s" % (a, surface))
+            line, = ax.semilogy(zeta0_list, result, linestyle="", marker=".", label="a=%.1f, BC=%s" % (a, surface))
     leg = ax.legend(fancybox=True, shadow=True)
+    fig.savefig("figures/energy_zeta.pdf")
 
 
 def task3a():
@@ -353,7 +357,7 @@ def task3a():
             kk_index = (h2len - 1) // 2
             R[j] = e_K[kk_index].real
 
-        axes[i].semilogy(theta_grads, R, label=r"$\zeta_0$ = % .1f" % zeta0)
+        line, = axes[i].semilogy(theta_grads, R, label=r"$\zeta_0$ = % .1f" % zeta0)
         axes[i].legend()
         axes[i].autoscale(tight=True)
 
