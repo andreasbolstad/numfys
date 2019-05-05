@@ -20,7 +20,7 @@ import numpy as np
 from numpy.lib.scimath import sqrt as csqrt
 from scipy.special import jv # Bessel function, 1st kind
 from scipy.special import factorial
-from scipy.integrate import quad
+from scipy.integrate import quad # Integration of a input function from a to b
 
 import matplotlib.pyplot as plt
 from matplotlib import ticker
@@ -35,8 +35,8 @@ wavelength = 1.0
 omega_c = 2*np.pi / wavelength
 
 # G vector h-values
-# H = 10
-H = 14
+# H = 6 # Quick-run, testing
+H = 14 # Proper results, same as 2*ceil(omega_c) for a=3.5
 # H = 2*ceil(omega_c)
 print("2*omega / c =", 2*ceil(omega_c))
 print("H =", H)
@@ -63,6 +63,12 @@ def abs2(z):
 # |4. Calculations|
 # +---------------+
 
+"""
+Start by looking at calc_rayleigh()
+"""
+
+
+
 def calc_Ihat_dpc(a, b, gamma, zeta0, h1, h2):
     """Doubly periodic cosine"""
     z = gamma * zeta0 / 2
@@ -70,6 +76,21 @@ def calc_Ihat_dpc(a, b, gamma, zeta0, h1, h2):
 
 
 def calc_Ihat_tcone(a, b, gamma, zeta0, h1, h2, **kwargs):
+    """
+    Caching:
+    Python allows static-like variables by using <function name>.<variable 
+    
+    Tricky function:
+    quad_array :: a vectorized integrator
+      Why:
+      > Instead of looping over all possible G-values (a 2D or 4D matrix) we vectorize using numpy
+      > The result comes out with the same array dimensions as the input parameter (G in this case)
+      How:
+      > uses quad to solve the Ihat integral for a truncated cone for a specific value og G (variable Gx here) 
+      > using np.vectorize, we get a vectorized function
+      > quad_array is basically quad, but vectorized. 
+      > Input an array (G here) and ouput an array with integration results for each G
+    """
     nfacs = 7 # Number of factors in sum, 3rd term in eq. 59
     pb = kwargs["pb"]
     pt = kwargs["pt"]
@@ -86,6 +107,8 @@ def calc_Ihat_tcone(a, b, gamma, zeta0, h1, h2, **kwargs):
     dim = len(h1.shape)
     if dim not in calc_Ihat_tcone.dims:
         calc_Ihat_tcone.dims.append(dim)
+        # 1
+        term1 = np.where(G == 0, 1, 0)
 
         # 2
         z = G * pt
@@ -95,19 +118,19 @@ def calc_Ihat_tcone(a, b, gamma, zeta0, h1, h2, **kwargs):
         pregamma_term3 = np.zeros((nfacs, *G.shape), dtype=float)
         quad_array = np.vectorize(lambda Gx: quad(lambda x: (pb-(pb-pt)*x) * jv(0, Gx*(pb-(pb-pt)*x)) * x**n , 0, 1)[0])
         for i, n in enumerate(np.arange(1, nfacs+1)):
+            print("integral power:", n, "/", nfacs)
             pregamma_term3[i] = quad_array(G) / factorial(n)
         pregamma_term3 *= 2 * np.pi * (pb-pt)/(a*a)
         
-        calc_Ihat_tcone.cache[dim] = (pregamma_term2, pregamma_term3)
+        calc_Ihat_tcone.cache[dim] = (term1, pregamma_term2, pregamma_term3)
         
     else:
-        pregamma_term2 = calc_Ihat_tcone.cache[dim][0]
-        pregamma_term3 = calc_Ihat_tcone.cache[dim][1]
+        term1 = calc_Ihat_tcone.cache[dim][0]
+        pregamma_term2 = calc_Ihat_tcone.cache[dim][1]
+        pregamma_term3 = calc_Ihat_tcone.cache[dim][2]
 
     ##################
     # Post gamma
-    # 1
-    term1 = np.where(G == 0, 1, 0)
    
     # 2
     postgamma_term2 = (np.exp(-1j*gamma*zeta0) - 1)
@@ -118,12 +141,14 @@ def calc_Ihat_tcone(a, b, gamma, zeta0, h1, h2, **kwargs):
     for i, n in enumerate(np.arange(1, nfacs+1)):
         postgamma_term3[i] = (-1j*gamma*zeta0)**n
     term3 = np.sum(pregamma_term3 * postgamma_term3, axis=0)
-    print(term3.dtype)
 
     return term1 + term2 + term3
 
 
 def calc_Ihat_tcos(a, b, gamma, zeta0, h1, h2, **kwargs):
+    """
+    See calc_Ihat_tcone(). They are very similar, but this function is a bit shorter
+    """
     nfacs = 7
     p0 = kwargs["p0"]
     G = np.sqrt(h1**2 + h2**2) * (2*np.pi / a)
@@ -142,6 +167,7 @@ def calc_Ihat_tcos(a, b, gamma, zeta0, h1, h2, **kwargs):
         
         pregamma = np.zeros((nfacs, *G.shape), dtype=float)
         for i, n in enumerate(np.arange(1, nfacs+1)):
+            print("integral power:", n, "/", nfacs)
             quad_array = np.vectorize( lambda Gx: quad(lambda x: x*jv(0, Gx*x)*(zeta0*np.cos(0.5*np.pi*x/p0))**n, 0, p0)[0] ) 
             pregamma[i] = quad_array(G) * 2*np.pi / a**2 / factorial(n)
        
@@ -214,8 +240,8 @@ def calc_rayleigh(a, b,theta0, phi0, zeta0, surface="dir", func="dpcos", **fargs
             h2_diff[np.newaxis, :, np.newaxis, :], # 2nd and 4th
             **fargs)
 
-
-    if surface == "neu":
+    
+    if surface == "neu": # Neumann BC
         # K * K'
         prod1 = (K1 * K1[:, np.newaxis]) # K' (inner, 2nd) * K (outer 1st)
         prod2 = (K2 * K2[:, np.newaxis])
@@ -224,7 +250,7 @@ def calc_rayleigh(a, b,theta0, phi0, zeta0, surface="dir", func="dpcos", **fargs
 
         N = -(omega_c**2 - ((k1 * K1)[:, np.newaxis] + k2 * K2)) / alpha0_k 
 
-    elif surface == "dir":
+    elif surface == "dir": # Dirichlet BC
         M = 1
         N = 1
 
@@ -268,7 +294,7 @@ def calc_anomalies(a, phi0):
 def presetup():
     plt.subplots_adjust(wspace=0, hspace=0)
 
-#Plotting settings
+#Plotting settings, not used anymore, a leftover for inspiration..
 def postsetup(ax):
     ax.autoscale(tight=True)
     ax.tick_params(direction='in', which='both')
@@ -414,14 +440,15 @@ def task3b():
         for j, idx in enumerate(indices):
             ekg[j,i] = e_K[idx].real
 
-    t0s = calc_anomalies(a, phi0)
+    # calc_anomalies() does not create anomalies for negative angles...
+    # t0s = calc_anomalies(a, phi0)
 
     labels = ["h = {0, 0}", "h = {1, 0}", "h = {-1, 0}", "h = {0, ±1}", "h = {1, ±1}", "h = {-1, ±1}"]
     for i, idx in enumerate(indices):
         axes[i].plot(theta_grads, ekg[i], label=labels[i])
         axes[i].set_ylabel(r"$e(\mathbf{k_{||}}+\mathbf{G_{||}}(h)|\mathbf{k_{||}})$")
-        for theta in t0s:
-            axes[i].axvline(theta, linestyle='--', alpha=0.1, color='k', lw=0.8)
+        # for theta in t0s:
+            # axes[i].axvline(theta, linestyle='--', alpha=0.1, color='k', lw=0.8)
         axes[i].legend(loc='center left')
         postsetup(axes[i])
     axes[-1].set_xlabel(r"$\theta_0, deg$")
@@ -429,33 +456,73 @@ def task3b():
 
 
 def task4():
-    a = 3.5 * wavelength
+    # Expensive run in most cases, especially for large N
+    # Some arrays are saved to be plotted again later if needed
+    plot_only = False # If true, load previous results 
+
+    a = 0.5 * wavelength
     b = 2*np.pi / a
     zeta0 = 0.1 * wavelength
     phi0 = 0
-    N = 500
-    theta_grads = np.linspace(0, 90, N, endpoint=False) 
+    N = 1000
+    theta_grads = np.linspace(-89.9, 89.9, N)
     theta_list = theta_grads * np.pi / 180 
 
-    ekg = np.zeros((6, N))
     idx00 = (h2len - 1) // 2 # Center of hlist, where h1=h2=0
-    # (0,0), (1,0), (-1,0), (0,pm1), (1,pm1), (-1,pm1)
-    indices = [idx00, idx00+hlen, idx00-hlen, idx00+2*hlen, idx00-2*hlen, idx00+3*hlen]
-    
-    fig, axes = plt.subplots(6, figsize=(6,12), sharex=True)
-    presetup()
-    for i, theta0 in enumerate(theta_list):
-        print("%d / %d" % (i, N) )
-        # e_K = calc_rayleigh(a, b,theta0, phi0, zeta0, surface="neu", func="dpcos")
-        # e_K = calc_rayleigh(a, b,theta0, phi0, zeta0, surface="neu", func="tcone", pb=a/4, pt=a/8)
-        e_K = calc_rayleigh(a, b,theta0, phi0, zeta0, surface="neu", func="tcos", p0=a/4)
-        for j, idx in enumerate(indices):
-            ekg[j,i] = e_K[idx].real
+    mmax = np.around(2*a).astype(int) - 1
+    # mmax = H//2-1
+    print("mmax", mmax)
+    mvals = np.arange(-mmax, mmax+1, dtype=int)
+    indices = idx00 + hlen * mvals 
 
+    if not plot_only:
+        U = np.zeros(N)
+        ekg = np.zeros((mmax*2+1, N))
+
+        surface = "dir"
+        func = "tcone"
+
+        for i, theta0 in enumerate(theta_list):
+            print("%d / %d" % (i, N) )
+            if func == "dpcos":
+                e_K = calc_rayleigh(a, b,theta0, phi0, zeta0, surface=surface, func="dpcos")
+            elif func == "tcone":
+                e_K = calc_rayleigh(a, b,theta0, phi0, zeta0, surface=surface, func="tcone", pb=a/4, pt=a/8)
+            elif func == "tcos":
+                e_K = calc_rayleigh(a, b,theta0, phi0, zeta0, surface=surface, func="tcos", p0=a/4)
+            for j, idx in enumerate(indices):
+                ekg[j,i] = e_K[idx].real
+            U[i] = np.sum(np.where(e_K.imag == 0, e_K.real, 0))
+
+        np.save(func + surface + ("%1.1f" % a) + "_e" , ekg)
+        np.save(func + surface + ("%1.1f" % a) + "_U", U)
+
+    if plot_only:
+        ekg = np.load("tconeneu3.5_e.npy")
+        U = np.load("tconeneu3.5_U.npy")
+
+    error = np.abs(1-U)
+
+    fig, (ax1, ax2) = plt.subplots(2, 1)
+    lines = []
     for i, idx in enumerate(indices):
-        axes[i].plot(theta_grads, ekg[i])
-        # postsetup(axes[i])
+        # line, = ax1.semilogy(theta_grads, ekg[i], label="m=%d" % mvals[i])
+        line, = ax1.plot(theta_grads, ekg[i], label="m=%d" % mvals[i])
+        lines.append(line)
 
+    t0s = calc_anomalies(a, phi0)
+    for theta in t0s:
+        ax1.axvline(theta, linestyle='--', alpha=0.1, color='k', lw=0.8)
+
+    leg = ax1.legend()
+    ax1.set_xlabel(r"$\theta_0, deg$")
+    ax1.set_ylabel(r"$e(\mathbf{k_{||}}+\mathbf{G_{||}}(h)|\mathbf{k_{||}})$")
+
+    ax2.semilogy(theta_grads, error, label="error")
+    ax2.set_xlabel(r"$\theta_0, deg$")
+    ax2.set_ylabel(r"$|1-U|$")
+    
+    toggleplot(fig, lines, leg)
 
 # +-------+
 # |6. Main|
@@ -463,7 +530,7 @@ def task4():
 
 if __name__ == "__main__":
 
-    selected_options = [3]
+    selected_options = [5]
 
     options = {
         1: "task1",
