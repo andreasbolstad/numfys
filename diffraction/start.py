@@ -38,7 +38,8 @@ omega_c = 2*np.pi / wavelength
 # H = 10
 H = 14
 # H = 2*ceil(omega_c)
-print(H)
+print("2*omega / c =", 2*ceil(omega_c))
+print("H =", H)
 h = np.arange(-H, H+1)
 hlen = 2*H+1
 h2len = hlen**2
@@ -362,7 +363,8 @@ def task3a():
     a = 3.5 * wavelength
     b = 2*np.pi / a
     zeta0_list = np.array([0.3, 0.5, 0.7]) * wavelength
-    phi0 = np.pi / 4 
+    # phi0 = np.pi / 4 
+    phi0 = 0
     N = 1000
     theta_grads = np.linspace(0, 90, N, endpoint=False) 
     theta_list = theta_grads * np.pi / 180 
@@ -380,15 +382,15 @@ def task3a():
             kk_index = (h2len - 1) // 2
             R[j] = e_K[kk_index].real
 
-        line, = axes[i].semilogy(theta_grads, R, label=r"$\zeta_0$ = % .1f" % zeta0)
+        line, = axes[i].semilogy(theta_grads, R, label=r"$\zeta_0$ = % .1f$\lambda$" % zeta0)
         axes[i].set_ylabel("Reflectivity")
-        axes[i].legend()
-        axes[i].autoscale(tight=True)
+        axes[i].legend(loc="center right")
+        axes[i].autoscale(tight=True) # Remove margins between graph and axes
          
         for theta in t0s:
             axes[i].axvline(theta, linestyle='--', alpha=0.1, color='k', lw=0.8)
     axes[-1].set_xlabel(r"$\theta_0, deg$")
-    fig.savefig("figures/reflectivity_phi45.pdf") 
+    fig.savefig("figures/reflectivity_phi00.pdf") 
 
 
 def task3b():
@@ -396,7 +398,7 @@ def task3b():
     b = 2*np.pi / a
     zeta0 = 0.5 * wavelength
     phi0 = 0
-    N = 100
+    N = 1000
     theta_grads = np.linspace(0, 90, N, endpoint=False) 
     theta_list = theta_grads * np.pi / 180 
 
@@ -417,10 +419,12 @@ def task3b():
     labels = ["h = {0, 0}", "h = {1, 0}", "h = {-1, 0}", "h = {0, ±1}", "h = {1, ±1}", "h = {-1, ±1}"]
     for i, idx in enumerate(indices):
         axes[i].plot(theta_grads, ekg[i], label=labels[i])
+        axes[i].set_ylabel(r"$e(\mathbf{k_{||}}+\mathbf{G_{||}}(h)|\mathbf{k_{||}})$")
         for theta in t0s:
             axes[i].axvline(theta, linestyle='--', alpha=0.1, color='k', lw=0.8)
-        axes[i].legend()
+        axes[i].legend(loc='center left')
         postsetup(axes[i])
+    axes[-1].set_xlabel(r"$\theta_0, deg$")
     fig.savefig("figures/efficiencies.pdf")
 
 
@@ -459,7 +463,7 @@ def task4():
 
 if __name__ == "__main__":
 
-    selected_options = [4]
+    selected_options = [3]
 
     options = {
         1: "task1",
