@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from time import time
+from numba import njit
 
 np.set_printoptions(linewidth=200)
 
@@ -28,7 +29,7 @@ etaAA = 1.95
 etaAB = 1.90
 etaBB = 0.70
 
-
+@njit
 def V_create(a):
     VAA = epsAA * ( (gamAA/a)**6 - np.exp(-a/etaAA) )
     VAB = epsAB * ( (gamAB/a)**6 - np.exp(-a/etaAB) )
@@ -36,10 +37,10 @@ def V_create(a):
     return [VAA, VAB, VBB]
 
 
+# @njit
 def grid_create(xA):
     # Matrix of A and B
     # A = 1, B = 2
-    xA = 0.5
     nA = int(xA * N*M)
     grid = np.ones(N*M, dtype=int) * 2
     grid[0:nA] = 1
@@ -48,6 +49,7 @@ def grid_create(xA):
 
 
 # Create Hamiltonian
+@njit
 def H_create(grid, V):
     H = np.zeros((L,L))
     for i in np.arange(L):
@@ -72,13 +74,14 @@ def H_create(grid, V):
 
 
 def swap(grid):
-    swap1, swap2 = np.random.random_integers(0, L-1, size=2)
+    swap1, swap2 = np.random.randint(L, size=2)
     if grid[swap1] == grid[swap2]:
         return swap(grid)
     return swap1, swap2
 
 
 
+@njit
 def F_calc(grid, V, kT):
     H = H_create(grid, V)
     E = np.linalg.eigvalsh(H)
@@ -91,6 +94,7 @@ def F_calc(grid, V, kT):
 ### Main program ###
 def enthalpy_problem(timesteps):
     a = 1.3 # Aangstroem
+    # a = 0.9
     kT = 0.1 # 1/beta
     
     V = V_create(a)
@@ -106,34 +110,49 @@ def enthalpy_problem(timesteps):
     FB = F_calc(grid, V, kT)
 
     # F(a) 
-    xA = 0.5
-    grid = grid_create(xA)
+    N = 50
+    F_a = np.zeros(N)
+    xAs = np.linspace(0.1, 0.9, N)
+    # F_a = np.array([0])
+    # xAs = np.array([0.5])
+    for i, xA in enumerate(xAs):
+        grid = grid_create(xA)
 
-    c = np.logspace(-1, 3, timesteps)
-    rand_compare_W = np.random.rand(timesteps)
+        c = np.logspace(-2, 1, timesteps)
+        rand_compare_W = np.random.rand(timesteps)
 
-    Fprev = 0
-    for i in range(timesteps):        
+        Fprev = 0
+        for j in range(timesteps):        
 
-        swap1, swap2 = swap(grid)
-        grid[swap1], grid[swap2] = grid[swap2], grid[swap1] 
-        
-        F = F_calc(grid, V, kT)
-        W = np.exp( (F-Fprev) * c[i] )
-
-        accept = (W < rand_compare_W[i])
-
-        # Swap back if bigger
-        if accept:
-            Fprev = F
-        else:
-            # Swap back
+            swap1, swap2 = swap(grid)
             grid[swap1], grid[swap2] = grid[swap2], grid[swap1] 
+            
+            F = F_calc(grid, V, kT)
+            # print(F-Fprev)
+            W = np.exp( (F-Fprev) * c[j] )
 
-    print()
-    print("timesteps", timesteps)
-    print("xA", xA)
-    print("Enthalpy", F - FA*xA - FB*(1-xA))
+            accept = (W < rand_compare_W[j])
+
+            # Swap back if bigger
+            if accept:
+                Fprev = F
+            else:
+                # Swap back
+                grid[swap1], grid[swap2] = grid[swap2], grid[swap1] 
+        print("xA", xA, "F", F)
+        F_a[i] = F
+
+    Fdelta = F_a - FA*xAs - FB*(1-xAs)
+
+    plt.figure()
+    plt.plot(xAs, Fdelta)
+    plt.show()
+        
+    
+        # print()
+        # print("timesteps", timesteps)
+        # print("xA", xA)
+        # print("Enthalpy", F - FA*xA - FB*(1-xA))
 
 
 if __name__ == "__main__":
