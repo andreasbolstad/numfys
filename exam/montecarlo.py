@@ -3,6 +3,10 @@ import matplotlib.pyplot as plt
 from time import time
 from numba import njit
 
+
+DEBUG = False
+
+
 np.set_printoptions(linewidth=200)
 
 np.random.seed(1)
@@ -29,7 +33,7 @@ etaAA = 1.95
 etaAB = 1.90
 etaBB = 0.70
 
-# @njit
+
 def V_create(a):
     VAA = epsAA * ( (gamAA/a)**6 - np.exp(-a/etaAA) )
     VAB = epsAB * ( (gamAB/a)**6 - np.exp(-a/etaAB) )
@@ -37,7 +41,6 @@ def V_create(a):
     return [VAA, VAB, VBB]
 
 
-# @njit
 def grid_create(xA):
     # Matrix of A and B
     # A = 1, B = 2
@@ -48,8 +51,7 @@ def grid_create(xA):
     return grid
 
 
-# Create Hamiltonian
-@njit
+@njit # Substantial speed up
 def H_create(grid, V):
     H = np.zeros((L,L))
     for i in np.arange(L):
@@ -73,11 +75,6 @@ def H_create(grid, V):
     return H
 
 
-# def swap(grid):
-    # swap1, swap2 = np.random.randint(L, size=2)
-    # if grid[swap1] == grid[swap2]:
-        # return swap(grid)
-    # return swap1, swap2
 
 def swap(grid):
     swap1 = 0
@@ -87,23 +84,33 @@ def swap(grid):
     grid[swap1], grid[swap2] = grid[swap2], grid[swap1] 
     return grid
 
-# @njit
+
+
 def F_calc(grid, V, kT):
     H = H_create(grid, V)
     E = np.linalg.eigvalsh(H)
     return -kT * np.sum( np.log(1 + np.exp(-E/kT) ) )
 
 
-def update_grid_find_F(V, kT, grid, timesteps, multirun=True):
+
+def update_grid_find_F(V, kT, grid, timesteps):
 
     Flist = np.zeros(timesteps) # Debugging
     # Fmin = 0.0
     Fprev = 0.0
 
-    n_outer = timesteps // 100 # Number of changes in T (Monte Carlo timesteps)
+    # n_outer = timesteps // 100 # Number of changes in T (Monte Carlo timesteps)
+    # n_inner = timesteps // n_outer
+    n_outer = 20
     n_inner = timesteps // n_outer
+    print(n_outer)
+    print(n_inner)
 
     Tlist = np.logspace(-1, 3, n_outer)
+
+    # DEBUG
+    # plt.figure()
+    # plt.plot(np.arange(n_outer), Tlist, marker=".", linestyle="")
 
     for i in range(n_outer):
         rand_compare_W = np.random.rand(n_inner)
@@ -127,68 +134,15 @@ def update_grid_find_F(V, kT, grid, timesteps, multirun=True):
                 grid = oldgrid
                 # Swap back
 
-    # mask = np.nonzero(Flist)
-    if not multirun:
-        plt.figure()
-        plt.matshow(grid.reshape((N, M)))
-
-        plt.figure()
-        plt.plot(np.arange(timesteps), Flist, linestyle="", marker=".")
+    # DEBUG
+    # plt.figure()
+    # plt.plot(np.arange(timesteps), Flist, linestyle="", marker=".")
 
     return grid, F #Fmin
 
 
 ### Main program ###
-def enthalpy_problem(timesteps_init, a, kT, multirun=False, load=False):
-    
-    V = V_create(a)
-
-    # FA
-    xA_A = 1
-    grid = grid_create(xA_A)
-    FA = F_calc(grid, V, kT)
-    
-    # FB
-    xA_B = 0
-    grid = grid_create(xA_B)
-    FB = F_calc(grid, V, kT)
-
-    # F(a) 
-    N = 100
-
-    ##############
-    # Computations
-    if multirun:
-        F_a = np.zeros(N)
-        xAs = np.linspace(0.1, 0.9, N)
-    else:
-        F_a = np.array([0])
-        xAs = np.array([0.5])
-    
-    if not load: 
-        for i, xA in enumerate(xAs):
-            # timesteps = timesteps_init
-            timesteps = int(timesteps_init * 2*min(xA, (1-xA)))
-            grid = grid_create(xA)
-
-            grid, F = update_grid_find_F(V, kT, grid, timesteps, multirun=multirun)
-
-            print("xA", xA, "F", F, "timsteps", timesteps)
-            F_a[i] = F
-
-        Fdelta = F_a - FA*xAs - FB*(1-xAs)
-        np.save("Fdeltas", Fdelta)
-
-    ##########
-
-    else:
-        Fdelta = np.load("Fdeltas.npy")
-
-    if multirun:
-        plt.figure()
-        plt.plot(xAs, Fdelta)
-    
-# def enthalpy_problem(timesteps_init, a, kT, multirun=False, load=False):
+# def enthalpy_problem(timesteps_init, xA, a, kT, multirun=False, load=False):
     
     # V = V_create(a)
 
@@ -203,54 +157,126 @@ def enthalpy_problem(timesteps_init, a, kT, multirun=False, load=False):
     # FB = F_calc(grid, V, kT)
 
     # # F(a) 
-    # N = 100
+    # nx = 100
 
     # ##############
     # # Computations
     # if multirun:
-        # F_a = np.zeros(N)
-        # xAs = np.linspace(0.1, 0.9, N)
+        # Fs = np.zeros(N)
+        # xAlist = np.linspace(0.1, 0.9, xa)
     # else:
-        # F_a = np.array([0])
-        # xAs = np.array([0.5])
+        # Fs = np.zeros(3)
+        # xAlist = np.array([0.25, 0.5, 0.75])
+        # plt.figure()
     
     # if not load: 
-        # for i, xA in enumerate(xAs):
-            # # timesteps = timesteps_init
+        # for i, xA in enumerate(xAlist):
             # timesteps = int(timesteps_init * 2*min(xA, (1-xA)))
             # grid = grid_create(xA)
 
             # grid, F = update_grid_find_F(V, kT, grid, timesteps, multirun=multirun)
 
             # print("xA", xA, "F", F, "timsteps", timesteps)
-            # F_a[i] = F
+            # Fs[i] = F
 
-        # Fdelta = F_a - FA*xAs - FB*(1-xAs)
+            # if not multirun:
+                # plt.subplot(1, 3, i+1)
+                # plt.matshow(grid.reshape((N, M)), fignum=False)
+
+        # Fdelta = Fs - FA*xAlist - FB*(1-xAlist)
         # np.save("Fdeltas", Fdelta)
 
-    ##########
+    # ##########
 
-    else:
-        Fdelta = np.load("Fdeltas.npy")
+    # else:
+        # Fdelta = np.load("Fdeltas.npy")
 
-    if multirun:
-        plt.figure()
-        plt.plot(xAs, Fdelta)
+    # if multirun:
+        # plt.figure()
+        # plt.plot(xAlist, Fdelta)
+
+    
+def enthalpy_problem(timesteps_init, xAlist, a, kT):
+
+    V = V_create(a)
+
+    # FA
+    xA_A = 1
+    grid = grid_create(xA_A)
+    FA = F_calc(grid, V, kT)
+    
+    # FB
+    xA_B = 0
+    grid = grid_create(xA_B)
+    FB = F_calc(grid, V, kT)
 
 
-if __name__ == "__main__":
+    ##############
+    # Computations
+
+    N_xA = len(xAlist)
+    Fs = np.zeros(N_xA)
+    grids = np.zeros((N_xA, N*M))
+    
+    for i, xA in enumerate(xAlist):
+        timesteps = int(timesteps_init * 2*min(xA, (1-xA)))
+        startgrid = grid_create(xA)
+
+        grids[i], Fs[i] = update_grid_find_F(V, kT, startgrid, timesteps)
+
+        print("xA", xA, "F", Fs[i], "timsteps", timesteps)
+
+    Fdeltas = Fs - FA*xAlist - FB*(1-xAlist)
+    np.save("Fdeltas", Fdeltas)
+
+    return Fdeltas, grids
+
+
+
+def snapshot():
+    timesteps = 4000
+
+    # a = 1.3 # Aangstroem
+    a = 0.9
+    kT = 0.1 # 1/beta
+
+    xAlist = np.array([0.25, 0.5, 0.75])
+
     start = time()
+    _, grids = enthalpy_problem(timesteps, xAlist, a, kT)
+    end = time()
+    print("Snaptshot time", end-start)
 
-    timesteps = 3000
+    plt.figure()
+    for i in range(3):
+        plt.subplot(1, 3, i+1)
+        plt.matshow(grids[i].reshape((N, M)), fignum=False)
+
+
+def multirun():
+    timesteps = 4000
 
     a = 1.3 # Aangstroem
     # a = 0.9
     kT = 0.1 # 1/beta
 
-    enthalpy_problem(timesteps, a, kT, multirun=False, load=False)     
+    Nxa = 50
+    xAlist = np.linspace(0.1, 0.5, Nxa)
 
+    start = time()
+    Fdeltas, _ = enthalpy_problem(timesteps, xAlist, a, kT)
     end = time()
-    print("time", end-start)
+    print("Multirun time", end-start)
+
+    plt.figure()
+    plt.plot(xAlist, Fdeltas)
+
+
+if __name__ == "__main__":
+
+    # snapshot()
+    multirun()
+
     
     plt.show()
 
