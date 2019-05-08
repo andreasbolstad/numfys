@@ -9,7 +9,7 @@ DEBUG = False
 
 np.set_printoptions(linewidth=200)
 
-np.random.seed(1)
+np.random.seed(2)
 
 #Lattice size
 N = 10
@@ -96,8 +96,9 @@ def F_calc(grid, V, kT):
 
 def update_grid_find_F(V, kT, grid, timesteps):
 
-    Flist = np.zeros(timesteps) # Debugging
-    # Fmin = 0.0
+    TOL = 0.5e-3
+
+    # Flist = np.zeros(len(timesteps)) # Debugging
     Fprev = 0.0
 
     # n_outer = timesteps // 100 # Number of changes in T (Monte Carlo timesteps)
@@ -113,6 +114,9 @@ def update_grid_find_F(V, kT, grid, timesteps):
     # plt.figure()
     # plt.plot(np.arange(n_outer), Tlist, marker=".", linestyle="")
 
+    n_recent = 10
+    F_recent_list = np.arange(n_recent).astype(float)
+
     for i in range(n_outer):
         rand_compare_W = np.random.rand(n_inner)
         for j in range(n_inner):
@@ -127,10 +131,23 @@ def update_grid_find_F(V, kT, grid, timesteps):
 
             # Swap back if bigger
             if accept:
-                Flist[i*n_inner + j] = F # Debugging
+                # Flist[i*n_inner + j] = F # Debugging
+
+                # k = (i*n_inner + j) % n_recent
+                # F_recent_list[k] = F
+                # F_avg = np.sum(F_recent_list) / n_recent
+                # # print(F_recent_list, F_avg)
+                # error = np.sqrt( np.sum( (F_avg - F_recent_list)**2 ) ) / np.abs(F_avg)
+                # # print(error, "<", TOL,  F - Fprev)
+                # if error < 10*TOL:
+                    # print(error, "<", TOL,  F - Fprev)
+
+                # if error < TOL:
+                    # print("tolarance reached!")
+                    # print(error, "<", TOL,  F - Fprev, i*n_inner + j)
+                    # return grid, F
                 Fprev = F
-                # if F < Fmin:
-                    # Fmin = F
+
             else:
                 grid = oldgrid
                 # Swap back
@@ -139,7 +156,7 @@ def update_grid_find_F(V, kT, grid, timesteps):
     # plt.figure()
     # plt.plot(np.arange(timesteps), Flist, linestyle="", marker=".")
 
-    return grid, F #Fmin
+    return grid, F 
 
 
 ### Main program ###
@@ -225,27 +242,123 @@ def multirun():
     plt.plot(xAlist, Fdeltas)
     
 
-def convergence_run():
+
+def error_benchmark(a, kT):
+
+    n_times = 10
+    timelist = 10000 * np.ones(n_times, dtype=int)
+    xA = np.array([0.5]) # Array because enthalpy_problem() requires a list
+    Fdeltas = np.zeros(n_times) 
+
+    for i, timesteps in enumerate(timelist):
+        Fdeltas[i], _ = enthalpy_problem(timesteps, xA, a, kT)
+        # print('Fdelta', Fdeltas[i])
+
+    Fsum = np.sum(Fdeltas)
+    Favg = Fsum / n_times
+    rel_error_avg = np.sum( np.abs( Favg - Fdeltas) ) / Fsum
+
+    return np.abs(rel_error_avg)
+
+
+
+def error_finder(timesteps, xA, a, kT):
+
+    n_times = 10
+    Fdeltas = np.zeros(n_times)
+
+    for i in range(n_times):
+        Fdeltas[i], _ = enthalpy_problem(timesteps, np.array([xA]), a, kT)
+
+    Fsum = np.sum(Fdeltas)
+    Favg = Fsum / n_times
+    # print("Favg", Favg)
+    rel_error_avg = np.sum( np.abs( Favg - Fdeltas) ) / Fsum
+    print("Relative error:", rel_error_avg)
+    return np.abs(rel_error_avg)
+        
+
+
+def find_necessary_timesteps(xA, max_error, a, kT):
+    timesteps = 100
+    prevsteps = 0
+    preverror = 0
+    found_top_value = False
+    while True:
+        error = error_finder(timesteps, xA, a, kT)
+        if error < max_error:
+            preverror = error # Remove later
+            found_top_value = True
+            prevsteps = timesteps
+            timesteps = int(timesteps * 0.9)
+        elif found_top_value:
+            print("Error < maxerror:", preverror, max_error) # Remove later
+            break
+        else:
+            timesteps *= 2
+    return prevsteps
+
+
+def convergence_data_miner():
     a = 1.3 # Aangstroem
     # a = 0.9
     kT = 0.1 # 1/beta
 
-    timelist = (np.linspace(10, 100, 10)**2).astype(int)
-    xAlist = np.array([0.25, 0.5, 0.75])
+    # max_error = error_benchmark(a, kT)
+    # print(max_error)
+    max_error = 0.008
     
-    for xA in xAlist:
-        print()
-        print('xA', xA)
-        for time in timelist:
-            Fdelta, _ = enthalpy_problem(time, np.array([xA]), a, kT)
-            print('Fdelta', Fdelta)
+    print(max_error)
+
+    iterations = 10
+    timestep_list = np.zeros(iterations) 
+    xA_list = np.linspace(0.1, 0.9, iterations)
+    for i, xA in enumerate(xA_list):
+        timesteps = find_necessary_timesteps(0.2, max_error, a, kT)
+        print("xA=%.2f needs %d timesteps" % (xA, timesteps))
+        timestep_list[i] = timesteps
+    
+    np.save("timesteps", timestep_list)
+
+    plt.figure()
+    plt.plot(xA_list, timestep_list)
+
+
+
+
+
+
+# def convergence_run():
+    # a = 1.3 # Aangstroem
+    # # a = 0.9
+    # kT = 0.1 # 1/beta
+
+    # n_times = 10
+    # # timelist = (np.linspace(10, 100, n_times)**2).astype(int)
+    # # timelist = 10000 + np.arange(n_times, dtype=int) * 1000
+    # timelist = 10000 * np.ones(n_times, dtype=int)
+    # # xAlist = np.array([0.25, 0.5, 0.75])
+    # xAlist = np.array([0.5])
+    # Fdeltas = np.zeros(n_times) 
+
+    # for xA in xAlist:
+
+        # for i, time in enumerate(timelist):
+            # Fdeltas[i], _ = enthalpy_problem(time, np.array([xA]), a, kT)
+            # # print('Fdelta', Fdeltas[i])
+
+        # Fsum = np.sum(Fdeltas)
+        # Favg = Fsum / n_times
+        # rel_error_avg = np.sum( np.abs( Favg - Fdeltas) ) / Fsum
+
 
 
 if __name__ == "__main__":
 
     # snapshot()
     # multirun()
-    convergence_run()
+    # convergence_run()
+    convergence_data_miner()
     
     plt.show()
 
