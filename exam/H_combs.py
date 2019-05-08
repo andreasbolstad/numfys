@@ -10,8 +10,9 @@ res = comb(n, k)
 
 plt.figure()
 plt.semilogy(k, res)
-plt.xlabel("# of A atoms")
-plt.ylabel("# of possible Hamiltonians")
+plt.title("Number of possible Hamiltonians vs number of type A atoms, $N_H(N_A)$")
+plt.xlabel(r"$N_{A}$")
+plt.ylabel(r"$N_H$")
 plt.show()
 
 

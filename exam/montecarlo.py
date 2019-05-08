@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from time import time
 from numba import njit
 from functools import lru_cache
+from scipy.interpolate import UnivariateSpline
 
 DEBUG = False
 
@@ -96,26 +97,13 @@ def F_calc(grid, V, kT):
 
 def update_grid_find_F(V, kT, grid, timesteps):
 
-    TOL = 0.5e-3
-
     # Flist = np.zeros(len(timesteps)) # Debugging
     Fprev = 0.0
 
-    # n_outer = timesteps // 100 # Number of changes in T (Monte Carlo timesteps)
-    # n_inner = timesteps // n_outer
-    n_outer = 20
-    n_inner = timesteps // n_outer
-    # print(n_outer)
-    # print(n_inner)
+    n_outer = 20 # How many different T-values
+    n_inner = timesteps // n_outer # Iterations per T-value
 
     Tlist = np.logspace(-1, 3, n_outer)
-
-    # DEBUG
-    # plt.figure()
-    # plt.plot(np.arange(n_outer), Tlist, marker=".", linestyle="")
-
-    n_recent = 10
-    F_recent_list = np.arange(n_recent).astype(float)
 
     for i in range(n_outer):
         rand_compare_W = np.random.rand(n_inner)
@@ -132,37 +120,24 @@ def update_grid_find_F(V, kT, grid, timesteps):
             # Swap back if bigger
             if accept:
                 # Flist[i*n_inner + j] = F # Debugging
-
-                # k = (i*n_inner + j) % n_recent
-                # F_recent_list[k] = F
-                # F_avg = np.sum(F_recent_list) / n_recent
-                # # print(F_recent_list, F_avg)
-                # error = np.sqrt( np.sum( (F_avg - F_recent_list)**2 ) ) / np.abs(F_avg)
-                # # print(error, "<", TOL,  F - Fprev)
-                # if error < 10*TOL:
-                    # print(error, "<", TOL,  F - Fprev)
-
-                # if error < TOL:
-                    # print("tolarance reached!")
-                    # print(error, "<", TOL,  F - Fprev, i*n_inner + j)
-                    # return grid, F
                 Fprev = F
 
             else:
+                # Swap back to old grid when condition is not met
                 grid = oldgrid
-                # Swap back
 
     # DEBUG
     # plt.figure()
     # plt.plot(np.arange(timesteps), Flist, linestyle="", marker=".")
-
     return grid, F 
 
 
-### Main program ###
 
-@lru_cache(maxsize=32)
+@lru_cache(maxsize=32) # Returns cached value if same input parameters are used again (avoid reiteration)
 def enthalpy_start(a, kT):
+    """
+    Finds the potential values for a specific "a" and free energy for the two pure lattices
+    """
     V = V_create(a)
 
     # FA
@@ -179,7 +154,7 @@ def enthalpy_start(a, kT):
 
 
     
-def enthalpy_problem(timesteps_init, xAlist, a, kT):
+def enthalpy_problem(timesteps_init, xAlist, a, kT, speedup=False):
     
     V, FA, FB = enthalpy_start(a, kT)
 
@@ -188,13 +163,17 @@ def enthalpy_problem(timesteps_init, xAlist, a, kT):
     grids = np.zeros((N_xA, N*M))
     
     for i, xA in enumerate(xAlist):
-        # timesteps = int(timesteps_init * 2*min(xA, (1-xA)))
-        timesteps = timesteps_init
+        if speedup:
+            timesteps = 100 + int(timesteps_init * 4*min(xA**2, (1-xA)**2))
+        else:
+            timesteps = timesteps_init
         startgrid = grid_create(xA)
 
         grids[i], Fs[i] = update_grid_find_F(V, kT, startgrid, timesteps)
 
-        # print("xA", xA, "F", Fs[i], "timesteps", timesteps)
+        # Debugging
+        if speedup:
+            print("xA", xA, "F", Fs[i], "timesteps", timesteps)
 
     Fdeltas = Fs - FA*xAlist - FB*(1-xAlist)
     np.save("Fdeltas", Fdeltas)
@@ -204,49 +183,58 @@ def enthalpy_problem(timesteps_init, xAlist, a, kT):
 
 
 def snapshot():
-    timesteps = 4000
+    timesteps = 20000
 
     # a = 1.3 # Aangstroem
     a = 0.9
-    kT = 0.1 # 1/beta
+    kT = 0.5 # 1/beta
 
     xAlist = np.array([0.25, 0.5, 0.75])
 
     start = time()
     _, grids = enthalpy_problem(timesteps, xAlist, a, kT)
     end = time()
-    print("Snaptshot time", end-start)
+    print("Snapshot time", end-start)
 
     plt.figure()
+    plt.title("a = %1.1f, kT = %1.1f" % (a, kT))
     for i in range(3):
         plt.subplot(1, 3, i+1)
         plt.matshow(grids[i].reshape((N, M)), fignum=False)
+        plt.gca().set_title(r"$x_A$ = %1.2f" % xAlist[i])
+        plt.gca().xaxis.set_ticks_position('bottom')
+
+    plt.savefig("figures/snapshot_a09k05.pdf")
 
 
 def multirun():
-    timesteps = 2000
+    timesteps = 10000
 
     a = 1.3 # Aangstroem
     # a = 0.9
-    kT = 0.1 # 1/beta
+    kT = 0.5 # 1/beta
 
     Nxa = 98
+    # Nxa = 32
     xAlist = np.linspace(0.01, 0.99, Nxa)
 
     start = time()
-    Fdeltas, _ = enthalpy_problem(timesteps, xAlist, a, kT)
+    Fdeltas, _ = enthalpy_problem(timesteps, xAlist, a, kT, speedup=True)
     end = time()
     print("Multirun time", end-start)
 
     plt.figure()
     plt.plot(xAlist, Fdeltas)
-    
+    plt.title("Enthalpy for values: a = %1.1f, kT = %1.1f" % (a, kT))
+    plt.xlabel(r"$x_A$")
+    plt.ylabel(r"$\Delta F(a,x_A)$")
+    plt.savefig("figures/enthalpy_a%2.0f_kT%1.0f.pdf" % (a*10, kT*10))
 
 
 def error_benchmark(a, kT):
 
     n_times = 5
-    timelist = 10000 * np.ones(n_times, dtype=int)
+    timelist = 20000 * np.ones(n_times, dtype=int)
     xA = np.array([0.5]) # Array because enthalpy_problem() requires a list
     Fdeltas = np.zeros(n_times) 
 
@@ -262,29 +250,6 @@ def error_benchmark(a, kT):
 
     return maxerr
 
-        
-    # Fsum = np.sum(Fdeltas)
-    # Favg = Fsum / n_times
-    # rel_error_avg = np.sum( np.abs( Favg - Fdeltas) ) / Fsum
-
-    # return np.abs(rel_error_avg)
-
-
-
-# def error_finder(timesteps, xA, a, kT):
-
-    # n_times = 10
-    # Fdeltas = np.zeros(n_times)
-
-    # for i in range(n_times):
-        # Fdeltas[i], _ = enthalpy_problem(timesteps, np.array([xA]), a, kT)
-
-    # Fsum = np.sum(Fdeltas)
-    # Favg = Fsum / n_times
-    # # print("Favg", Favg)
-    # rel_error_avg = np.sum( np.abs( Favg - Fdeltas) ) / Fsum
-    # print("Relative error:", rel_error_avg)
-    # return np.abs(rel_error_avg)
         
 
 def error_finder(timesteps, max_error, xA, a, kT):
@@ -310,21 +275,28 @@ def error_finder(timesteps, max_error, xA, a, kT):
 
 
 
-min_misses = 0
-max_misses = 0
+min_misses = 0 # See how many has failed on the lower end
+max_misses = 0 # --"-- higher end
 def find_necessary_timesteps(xA, max_error, a, kT):
+    """
+    Finds the necessary Monte Carlo (time)steps needed 
+    to guarantee a smaller error than max_error for a particular xA-value
+    """
+    ### Fetch globals to update
     global min_misses
     global max_misses
 
+    ### Constants/settings
     minsteps = 100 # If timesteps < minsteps, accept current error and move on
     maxsteps = 10000 # If timesteps > maxsteps, accept current error and move on
     timesteps = 100
     prevsteps = 0
     preverror = 0
-    found_top_value = False
+    found_top_value = False # True when it finds the first (biggest) timestep with small enough error
 
     print("Find necessary timesteps for xA =", xA)
 
+    # Main event, returns when finding, or failing to find, an error
     while True:
         error = error_finder(timesteps, max_error, xA, a, kT)
 
@@ -334,18 +306,18 @@ def find_necessary_timesteps(xA, max_error, a, kT):
         if finished or too_few_steps:
             if timesteps < minsteps and error > max_error: 
                 min_misses += 1
-            print("Error < maxerror:", preverror, max_error) # Remove later
+            print("Error < maxerror:", preverror, max_error) # Debug
             return prevsteps # Latest result not good enough, return previous
 
         elif error < max_error:
             preverror = error # Remove later, only needed for debugging
             found_top_value = True
             prevsteps = timesteps
-            timesteps = int(timesteps * 0.85)
+            timesteps = int(timesteps * 0.9)
 
         elif timesteps > maxsteps:
             max_misses += 1
-            print("Error < maxerror:", preverror, max_error) # Remove later
+            print("Error < maxerror:", preverror, max_error) # Debug
             return timesteps # Return this result, even though it is not good enough. Saves alot of time... 
 
         else:
@@ -355,69 +327,70 @@ def find_necessary_timesteps(xA, max_error, a, kT):
 
 
 def convergence_data_miner():
-    a = 1.3 # Aangstroem
-    # a = 0.9
+    """
+    Runs through find_necessary_timesteps() for all xA.
+    a and kT can be varied for different plots
+    """
+
+    ### Constants
+    # a = 1.3 # Aangstroem
+    a = 0.9
     kT = 0.1 # 1/beta
 
-    # max_error = error_benchmark(a, kT)
-    # print(max_error)
+    ### Max error
+    max_error = error_benchmark(a, kT)
+    print(max_error)
+    # max_error = 0.7
+    # print("Max error:", max_error)
 
-    max_error = 0.7
-    print("Max error:", max_error)
-
-    iterations = 50
+    ### Iteration settings
+    iterations = 98
     timestep_list = np.zeros(iterations) 
-    xA_list = np.linspace(0.1, 0.9, iterations)
+    xA_list = np.linspace(0.01, 0.99, iterations)
+    
+    ### Main event and timing
+    start = time()
     for i, xA in enumerate(xA_list):
         timesteps = find_necessary_timesteps(xA, max_error, a, kT)
         print()
         print("xA=%.2f needs %d timesteps" % (xA, timesteps))
         timestep_list[i] = timesteps
+    end = time()
+    print("Convergence miner time:", end - start)
     
-    np.save("timesteps", timestep_list)
-
+    ### Save
+    astr = ("%1.1f" % a)
+    np.save("timesteps" + astr, timestep_list)
+    # timestep_list = np.load("timesteps.npy")
+    # timestep_list = np.load("timesteps" + astr + ".npy")
+    
+    ### How much failed?
     print("Min misses:", min_misses)
     print("Max misses:", max_misses)
 
+    ### Plot
     plt.figure()
-    plt.plot(xA_list, timestep_list, 'r.')
-
-
-
-
-
-
-# def convergence_run():
-    # a = 1.3 # Aangstroem
-    # # a = 0.9
-    # kT = 0.1 # 1/beta
-
-    # n_times = 10
-    # # timelist = (np.linspace(10, 100, n_times)**2).astype(int)
-    # # timelist = 10000 + np.arange(n_times, dtype=int) * 1000
-    # timelist = 10000 * np.ones(n_times, dtype=int)
-    # # xAlist = np.array([0.25, 0.5, 0.75])
-    # xAlist = np.array([0.5])
-    # Fdeltas = np.zeros(n_times) 
-
-    # for xA in xAlist:
-
-        # for i, time in enumerate(timelist):
-            # Fdeltas[i], _ = enthalpy_problem(time, np.array([xA]), a, kT)
-            # # print('Fdelta', Fdeltas[i])
-
-        # Fsum = np.sum(Fdeltas)
-        # Favg = Fsum / n_times
-        # rel_error_avg = np.sum( np.abs( Favg - Fdeltas) ) / Fsum
+    plt.plot(xA_list, timestep_list, 'bx')
+    plt.xlabel(r"$x_A$")
+    plt.ylabel("Number of Monte Carlo steps")
 
 
 
 if __name__ == "__main__":
 
+    ### A few runs to create snapshots, quick
     # snapshot()
-    # multirun()
-    # convergence_run()
-    convergence_data_miner()
+
+    ### Many runs to create enthalpy as a function of xA, slow
+    multirun()
+
+    ### Find necessary timesteps for different xA, extremely slow
+    ### Needs some tweaking, doesn't always work right out of the box
+    # convergence_data_miner()
+
+    ### Table data
+    # print(V_create(1.3))
+    # print(V_create(0.9))
     
     plt.show()
 
