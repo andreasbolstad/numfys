@@ -9,7 +9,7 @@ DEBUG = False
 
 np.set_printoptions(linewidth=200)
 
-np.random.seed(2)
+np.random.seed(1)
 
 #Lattice size
 N = 10
@@ -105,8 +105,8 @@ def update_grid_find_F(V, kT, grid, timesteps):
     # n_inner = timesteps // n_outer
     n_outer = 20
     n_inner = timesteps // n_outer
-    print(n_outer)
-    print(n_inner)
+    # print(n_outer)
+    # print(n_inner)
 
     Tlist = np.logspace(-1, 3, n_outer)
 
@@ -194,7 +194,7 @@ def enthalpy_problem(timesteps_init, xAlist, a, kT):
 
         grids[i], Fs[i] = update_grid_find_F(V, kT, startgrid, timesteps)
 
-        print("xA", xA, "F", Fs[i], "timesteps", timesteps)
+        # print("xA", xA, "F", Fs[i], "timesteps", timesteps)
 
     Fdeltas = Fs - FA*xAlist - FB*(1-xAlist)
     np.save("Fdeltas", Fdeltas)
@@ -245,7 +245,7 @@ def multirun():
 
 def error_benchmark(a, kT):
 
-    n_times = 10
+    n_times = 5
     timelist = 10000 * np.ones(n_times, dtype=int)
     xA = np.array([0.5]) # Array because enthalpy_problem() requires a list
     Fdeltas = np.zeros(n_times) 
@@ -254,49 +254,104 @@ def error_benchmark(a, kT):
         Fdeltas[i], _ = enthalpy_problem(timesteps, xA, a, kT)
         # print('Fdelta', Fdeltas[i])
 
-    Fsum = np.sum(Fdeltas)
-    Favg = Fsum / n_times
-    rel_error_avg = np.sum( np.abs( Favg - Fdeltas) ) / Fsum
+    maxerr = 0
+    for i in range(n_times-1):
+        err = np.abs( (Fdeltas[i] - Fdeltas[i+1])) #/ Fdeltas[i])
+        if err > maxerr:
+            maxerr = err 
 
-    return np.abs(rel_error_avg)
+    return maxerr
+
+        
+    # Fsum = np.sum(Fdeltas)
+    # Favg = Fsum / n_times
+    # rel_error_avg = np.sum( np.abs( Favg - Fdeltas) ) / Fsum
+
+    # return np.abs(rel_error_avg)
 
 
 
-def error_finder(timesteps, xA, a, kT):
+# def error_finder(timesteps, xA, a, kT):
 
-    n_times = 10
-    Fdeltas = np.zeros(n_times)
+    # n_times = 10
+    # Fdeltas = np.zeros(n_times)
 
-    for i in range(n_times):
-        Fdeltas[i], _ = enthalpy_problem(timesteps, np.array([xA]), a, kT)
+    # for i in range(n_times):
+        # Fdeltas[i], _ = enthalpy_problem(timesteps, np.array([xA]), a, kT)
 
-    Fsum = np.sum(Fdeltas)
-    Favg = Fsum / n_times
-    # print("Favg", Favg)
-    rel_error_avg = np.sum( np.abs( Favg - Fdeltas) ) / Fsum
-    print("Relative error:", rel_error_avg)
-    return np.abs(rel_error_avg)
+    # Fsum = np.sum(Fdeltas)
+    # Favg = Fsum / n_times
+    # # print("Favg", Favg)
+    # rel_error_avg = np.sum( np.abs( Favg - Fdeltas) ) / Fsum
+    # print("Relative error:", rel_error_avg)
+    # return np.abs(rel_error_avg)
         
 
+def error_finder(timesteps, max_error, xA, a, kT):
+    """
+    Only accept smaller error until enough steps have been taken
+    """
+    error = 0
+    counter = 0
+    iterations_to_pass = 10
+    
+    Fdelta_prev = enthalpy_problem(timesteps, np.array([xA]), a, kT)[0][0]
 
+    while error < max_error and counter < iterations_to_pass:
+        counter += 1
+        Fdelta = enthalpy_problem(timesteps, np.array([xA]), a, kT)[0][0]
+        # print("Fdelta", Fdelta, "Fdelta_prev", Fdelta_prev)
+        error = np.abs( (Fdelta - Fdelta_prev))# / Fdelta)
+        Fdelta_prev = Fdelta
+
+    # print("timesteps", timesteps, "error", error, "max_error", max_error)
+
+    return error
+
+
+
+min_misses = 0
+max_misses = 0
 def find_necessary_timesteps(xA, max_error, a, kT):
+    global min_misses
+    global max_misses
+
+    minsteps = 100 # If timesteps < minsteps, accept current error and move on
+    maxsteps = 10000 # If timesteps > maxsteps, accept current error and move on
     timesteps = 100
     prevsteps = 0
     preverror = 0
     found_top_value = False
+
+    print("Find necessary timesteps for xA =", xA)
+
     while True:
-        error = error_finder(timesteps, xA, a, kT)
-        if error < max_error:
-            preverror = error # Remove later
+        error = error_finder(timesteps, max_error, xA, a, kT)
+
+        finished = (found_top_value and error > max_error)
+        too_few_steps = timesteps < minsteps
+
+        if finished or too_few_steps:
+            if timesteps < minsteps and error > max_error: 
+                min_misses += 1
+            print("Error < maxerror:", preverror, max_error) # Remove later
+            return prevsteps # Latest result not good enough, return previous
+
+        elif error < max_error:
+            preverror = error # Remove later, only needed for debugging
             found_top_value = True
             prevsteps = timesteps
-            timesteps = int(timesteps * 0.9)
-        elif found_top_value:
+            timesteps = int(timesteps * 0.85)
+
+        elif timesteps > maxsteps:
+            max_misses += 1
             print("Error < maxerror:", preverror, max_error) # Remove later
-            break
+            return timesteps # Return this result, even though it is not good enough. Saves alot of time... 
+
         else:
-            timesteps *= 2
-    return prevsteps
+            timesteps = int(timesteps*1.5)
+
+
 
 
 def convergence_data_miner():
@@ -306,22 +361,26 @@ def convergence_data_miner():
 
     # max_error = error_benchmark(a, kT)
     # print(max_error)
-    max_error = 0.008
-    
-    print(max_error)
 
-    iterations = 10
+    max_error = 0.7
+    print("Max error:", max_error)
+
+    iterations = 50
     timestep_list = np.zeros(iterations) 
     xA_list = np.linspace(0.1, 0.9, iterations)
     for i, xA in enumerate(xA_list):
-        timesteps = find_necessary_timesteps(0.2, max_error, a, kT)
+        timesteps = find_necessary_timesteps(xA, max_error, a, kT)
+        print()
         print("xA=%.2f needs %d timesteps" % (xA, timesteps))
         timestep_list[i] = timesteps
     
     np.save("timesteps", timestep_list)
 
+    print("Min misses:", min_misses)
+    print("Max misses:", max_misses)
+
     plt.figure()
-    plt.plot(xA_list, timestep_list)
+    plt.plot(xA_list, timestep_list, 'r.')
 
 
 
