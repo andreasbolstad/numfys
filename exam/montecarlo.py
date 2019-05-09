@@ -36,6 +36,7 @@ etaBB = 0.70
 
 
 def V_create(a):
+    """Returns an array of the nearest neighbour potentials"""
     VAA = epsAA * ( (gamAA/a)**6 - np.exp(-a/etaAA) )
     VAB = epsAB * ( (gamAB/a)**6 - np.exp(-a/etaAB) )
     VBB = epsBB * ( (gamBB/a)**6 - np.exp(-a/etaBB) )
@@ -43,37 +44,50 @@ def V_create(a):
 
 
 def grid_create(xA):
-    # Matrix of A and B
-    # A = 1, B = 2
+    """
+    Creates a grid of length L=M*N to represent the 2D lattice.
+    1 represents atom type A, 2 represents B (why is explained in H_create())    
+    """
     nA = int(np.round(xA * L))
-    # print(nA, "A atoms")
     grid = np.ones(L, dtype=int) * 2
     grid[0:nA] = 1
-    # np.random.shuffle(grid)
+    # np.random.shuffle(grid) # Not needed
     return grid
 
 
-@njit # Substantial speed up
+
+@njit # Substantial speed up, x10-100 for for-loops
 def H_create(grid, V):
+    """
+    Creates the Hamiltonian for the lattice
+
+    Because the atom types are marked 1 and 2, we can do a nifty indexing trick.
+    Multiplying two values from the grid will give 1, 2 or 4. By using integer division of 2,
+    we get 0, 1 or 2 respectively. Since V = [VAA, VAB, VBB], the oppropriate potential can be
+    picked out directly with calculating indices instead of using if statements.
+    """
     H = np.zeros((L,L))
     for i in np.arange(L):
         H[i,i] = (HA if grid[i] == 1 else HB)
 
+        ## Vx
         if i % M == 0:
-            pot = V[(grid[i]*grid[i+M-1])//2]
-            H[i, i+M-1] = pot 
-            H[i+M-1, i] = pot
+            Vx = V[ (grid[i]*grid[i+M-1]) // 2 ]
+            H[i, i+M-1] = Vx 
+            H[i+M-1, i] = Vx
 
         else:
-            pot = V[(grid[i-1]*grid[i])//2]
-            H[i-1, i] = pot
-            H[i, i-1] = pot
+            Vx = V[ (grid[i-1]*grid[i]) // 2 ]
+            H[i-1, i] = Vx
+            H[i, i-1] = Vx
 
-        pot = V[(grid[i]*grid[(i+M)%L])//2]
-        H[i, (i+M)%L] = pot
+        ## Vy
+        Vy = V[ (grid[i]*grid[(i+M)%L]) // 2 ]
+        H[i, (i+M) % L] = Vy
 
-        pot = V[(grid[i]*grid[(i-M)%L])//2]
-        H[i, (i-M)%L] = pot
+        Vy = V[ (grid[i]*grid[(i-M)%L]) // 2 ]
+        H[i, (i-M) % L] = Vy
+
     return H
 
 
@@ -89,6 +103,12 @@ def swap(grid):
 
 
 def F_calc(grid, V, kT):
+    """
+    Returns the free energy F for a specific kT 
+    1. Create the Hamiltonian for specific grid and V (potential)
+    2. Calculate eigenergies. Using np.linalg.eigvalsh since H is symmetric
+    3. Calculate F
+    """
     H = H_create(grid, V)
     E = np.linalg.eigvalsh(H)
     return -kT * np.sum( np.log(1 + np.exp(-E/kT) ) )
@@ -96,6 +116,9 @@ def F_calc(grid, V, kT):
 
 
 def update_grid_find_F(V, kT, grid, timesteps):
+    """
+
+    """
 
     # Flist = np.zeros(len(timesteps)) # Debugging
     Fprev = 0.0
@@ -113,14 +136,15 @@ def update_grid_find_F(V, kT, grid, timesteps):
             
             F = F_calc(grid, V, kT)
             accept = True
+            ### Metropolis algorithm
             if F > Fprev:
                 W = np.exp( -(F-Fprev) * Tlist[i] )
                 accept = (W > rand_compare_W[j])
 
-            # Swap back if bigger
+            # Swap back if random number is smaller than W
             if accept:
-                # Flist[i*n_inner + j] = F # Debugging
                 Fprev = F
+                # Flist[i*n_inner + j] = F # Debugging
 
             else:
                 # Swap back to old grid when condition is not met
@@ -164,7 +188,7 @@ def enthalpy_problem(timesteps_init, xAlist, a, kT, speedup=False):
     
     for i, xA in enumerate(xAlist):
         if speedup:
-            timesteps = 100 + int(timesteps_init * 4*min(xA**2, (1-xA)**2))
+            timesteps = 100 + int(timesteps_init * 2*min(xA, (1-xA)))
         else:
             timesteps = timesteps_init
         startgrid = grid_create(xA)
@@ -181,70 +205,19 @@ def enthalpy_problem(timesteps_init, xAlist, a, kT, speedup=False):
     return Fdeltas, grids
 
 
-
-def snapshot():
-    timesteps = 20000
-
-    # a = 1.3 # Aangstroem
-    a = 0.9
-    kT = 0.5 # 1/beta
-
-    xAlist = np.array([0.25, 0.5, 0.75])
-
-    start = time()
-    _, grids = enthalpy_problem(timesteps, xAlist, a, kT)
-    end = time()
-    print("Snapshot time", end-start)
-
-    plt.figure()
-    plt.title("a = %1.1f, kT = %1.1f" % (a, kT))
-    for i in range(3):
-        plt.subplot(1, 3, i+1)
-        plt.matshow(grids[i].reshape((N, M)), fignum=False)
-        plt.gca().set_title(r"$x_A$ = %1.2f" % xAlist[i])
-        plt.gca().xaxis.set_ticks_position('bottom')
-
-    plt.savefig("figures/snapshot_a09k05.pdf")
-
-
-def multirun():
-    timesteps = 10000
-
-    a = 1.3 # Aangstroem
-    # a = 0.9
-    kT = 0.5 # 1/beta
-
-    Nxa = 98
-    # Nxa = 32
-    xAlist = np.linspace(0.01, 0.99, Nxa)
-
-    start = time()
-    Fdeltas, _ = enthalpy_problem(timesteps, xAlist, a, kT, speedup=True)
-    end = time()
-    print("Multirun time", end-start)
-
-    plt.figure()
-    plt.plot(xAlist, Fdeltas)
-    plt.title("Enthalpy for values: a = %1.1f, kT = %1.1f" % (a, kT))
-    plt.xlabel(r"$x_A$")
-    plt.ylabel(r"$\Delta F(a,x_A)$")
-    plt.savefig("figures/enthalpy_a%2.0f_kT%1.0f.pdf" % (a*10, kT*10))
-
-
 def error_benchmark(a, kT):
 
-    n_times = 5
-    timelist = 20000 * np.ones(n_times, dtype=int)
+    n_times = 10
+    timelist = 10000 * np.ones(n_times, dtype=int)
     xA = np.array([0.5]) # Array because enthalpy_problem() requires a list
     Fdeltas = np.zeros(n_times) 
 
     for i, timesteps in enumerate(timelist):
         Fdeltas[i], _ = enthalpy_problem(timesteps, xA, a, kT)
-        # print('Fdelta', Fdeltas[i])
 
     maxerr = 0
     for i in range(n_times-1):
-        err = np.abs( (Fdeltas[i] - Fdeltas[i+1])) #/ Fdeltas[i])
+        err = np.abs( (Fdeltas[i] - Fdeltas[i+1])) 
         if err > maxerr:
             maxerr = err 
 
@@ -266,7 +239,7 @@ def error_finder(timesteps, max_error, xA, a, kT):
         counter += 1
         Fdelta = enthalpy_problem(timesteps, np.array([xA]), a, kT)[0][0]
         # print("Fdelta", Fdelta, "Fdelta_prev", Fdelta_prev)
-        error = np.abs( (Fdelta - Fdelta_prev))# / Fdelta)
+        error = np.abs( (Fdelta - Fdelta_prev))
         Fdelta_prev = Fdelta
 
     # print("timesteps", timesteps, "error", error, "max_error", max_error)
@@ -324,6 +297,58 @@ def find_necessary_timesteps(xA, max_error, a, kT):
             timesteps = int(timesteps*1.5)
 
 
+###########################
+# Functions called by main
+###########################
+def snapshot():
+    timesteps = 20000
+
+    # a = 1.3 # Aangstroem
+    a = 0.9
+    kT = 0.5 # 1/beta
+
+    xAlist = np.array([0.25, 0.5, 0.75])
+
+    start = time()
+    _, grids = enthalpy_problem(timesteps, xAlist, a, kT)
+    end = time()
+    print("Snapshot time", end-start)
+
+    plt.figure()
+    plt.title("a = %1.1f, kT = %1.1f" % (a, kT))
+    for i in range(3):
+        plt.subplot(1, 3, i+1)
+        plt.matshow(grids[i].reshape((N, M)), fignum=False)
+        plt.gca().set_title(r"$x_A$ = %1.2f" % xAlist[i])
+        plt.gca().xaxis.set_ticks_position('bottom')
+
+    plt.savefig("figures/snapshot_a09k05.pdf")
+
+
+def multirun():
+    timesteps = 20000
+
+    # a = 1.3 # Aangstroem
+    a = 0.9
+    kT = 0.95 # 1/beta
+
+    Nxa = 98
+    # Nxa = 32
+    xAlist = np.linspace(0.01, 0.99, Nxa)
+
+    start = time()
+    Fdeltas, _ = enthalpy_problem(timesteps, xAlist, a, kT, speedup=True)
+    end = time()
+    print("Multirun time", end-start)
+
+    plt.figure()
+    plt.plot(xAlist, Fdeltas)
+    plt.title("Enthalpy for values: a = %1.1f, kT = %1.2f" % (a, kT))
+    plt.xlabel(r"$x_A$")
+    plt.ylabel(r"$\Delta F(a,x_A)$")
+    plt.savefig("figures/enthalpy_a%2.0f_kT%1.0f.pdf" % (a*10, kT*10))
+
+
 
 
 def convergence_data_miner():
@@ -335,7 +360,7 @@ def convergence_data_miner():
     ### Constants
     # a = 1.3 # Aangstroem
     a = 0.9
-    kT = 0.1 # 1/beta
+    kT = 0.95 # 1/beta
 
     ### Max error
     max_error = error_benchmark(a, kT)
