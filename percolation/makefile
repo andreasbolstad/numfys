@@ -28,6 +28,7 @@ percolate: percolate.f90
 	$(FC) $(FCFLAGS) percolate.f90 -o percolate
 
 percolate_pic: percolate_pic.f90
+	mkdir -p figures
 	$(FC) $(FCFLAGS) percolate_pic.f90 -o percolate_pic
 
 convolution: convolution.f90

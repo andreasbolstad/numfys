@@ -22,7 +22,7 @@ else:
     nsites = [100, 130,  166,  216,  278,  360,  464,  600,  774, 1000] 
 
 
-
+# Load data (created by convolution.f90)
 data = []
 basefilename = ("t%d.txt" % lattice_type)
 for i in nsites:
@@ -31,9 +31,9 @@ for i in nsites:
 nfiles = len(data)
 print(nfiles, "number of files")
 
-nq = len(data[0][:,0])
+nq = len(data[0][:,0]) # Number of probabilities
 
-data = np.array(data)
+data = np.array(data) # Make the list into a numpy array
 
 
 #################
@@ -76,6 +76,7 @@ nu = -linregress(x, logchi)[0] # Slope of x vs log(chi) gives nu
 gamma =  gamma_del_nu * nu
 beta = beta_del_nu * nu
 
+# Print Pc and the critical exponents to console
 print("\tTheory\tNumerical")
 print("Pc\t??\t", pc)
 print("Beta\t", 5/36, "\t", beta)
@@ -89,16 +90,23 @@ print("Nu\t", 4/3, "\t", nu)
 plot = True
 
 if plot:
-    x = np.linspace(0, 1, nq)
+
+    # Choose xlimits for plotting based on lattice type
     if lattice_type == 3:
         lowlim = 0.4 # Show smaller region of the plot, 0.4 to 0.8
         highlim = 0.8
-    if lattice_type == 4:
+
+    elif lattice_type == 4:
         lowlim = 0.3
         highlim = 0.7
-    if lattice_type == 6:
+
+    elif lattice_type == 6:
         lowlim = 0.2
         highlim = 0.6
+
+    # x values for plotting, should be renamed to q (probabilities)
+    x = np.linspace(0, 1, nq)
+
     # Major component probability (p_inf)
     plt.figure()
     plt.xlim(lowlim, highlim)

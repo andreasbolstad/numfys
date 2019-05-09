@@ -59,9 +59,13 @@ program convolution
         if (chiq /= chiq) then
             chiq = 0.0_wp
         end if
+
+        ! Printing to see progress
         if (mod(i, 1000) == 0) then
             print*, i
         end if
+        
+        ! Write results to file
         write(11, *) pq, smq, chiq 
     end do
 

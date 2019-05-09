@@ -59,6 +59,7 @@ program percolate
 
     do it = 1, niter 
 
+        ! Shuffle
         call random_number(randnums)
         do i = 1, m-1
             j = i-1
@@ -76,7 +77,8 @@ program percolate
         
         sites = -1
         rinf = 1
-
+        
+        ! Calculations
         do i = 0, m-1
             s1 = bonds(0, i)
             s2 = bonds(1, i)
@@ -116,7 +118,7 @@ program percolate
     p2_inf_avg = p2_inf_avg / niter
     sm_avg = sm_avg / niter
     
-
+    ! Write results to file
     open(11, file="measurements.txt", status="replace", form="formatted", access="sequential", action="write")
     write(11,*) ns, l, n, m
     do i = 0, m
