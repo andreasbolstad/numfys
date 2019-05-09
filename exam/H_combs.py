@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 k = np.arange(0, 201)
 n = np.ones_like(k) * 200
-res = comb(n, k)
+res = comb(n, k) # Binomial coefficients (all possible combinations) 
 
 
 plt.figure()

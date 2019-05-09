@@ -1,16 +1,37 @@
-import numpy as np
-import matplotlib.pyplot as plt
-from time import time
-from numba import njit
-from functools import lru_cache
-from scipy.interpolate import UnivariateSpline
+"""
+The program is structured as a few sections:
+1. Settings
+2. Constants
+3. Base functions
+4. Monte Carlo / Metropolis algorithm
+5. Enthalpy
+6. Convergence test functions
+7. Functions called by main
+8. MAIN
+"""
 
-DEBUG = False
 
 
-np.set_printoptions(linewidth=200)
+############
+# Settings
+############
 
-np.random.seed(1)
+import numpy as np # Numerics
+import matplotlib.pyplot as plt # Plotting
+from time import time # Measure runtimes
+from numba import njit # Decorator for precompiling 
+from functools import lru_cache # Cache previous function calls
+
+
+np.set_printoptions(linewidth=200) # For printing large arrays, Hamiltonian
+
+np.random.seed(1) # Initialize pseudorandom number generator
+
+
+
+##############
+# Constants
+##############
 
 #Lattice size
 N = 10
@@ -34,6 +55,14 @@ etaAA = 1.95
 etaAB = 1.90
 etaBB = 0.70
 
+
+
+
+
+
+##################
+# Base functions
+##################
 
 def V_create(a):
     """Returns an array of the nearest neighbour potentials"""
@@ -93,31 +122,27 @@ def H_create(grid, V):
 
 
 def swap(grid):
+    """Chooses indices randomly. If the indices point to atoms of the same type, start over."""
     swap1 = 0
     swap2 = 0
-    while grid[swap1] == grid[swap2]:
-        swap1, swap2 = np.random.randint(L, size=2)
+    while grid[swap1] == grid[swap2]: # Same kind? Always true first time since both indices are the same
+        swap1, swap2 = np.random.randint(L, size=2) # Two random numbers from 0 up to, but not including, L
     grid[swap1], grid[swap2] = grid[swap2], grid[swap1] 
-    return grid
+    return grid # New grid with two atoms swapped
 
 
 
-def F_calc(grid, V, kT):
-    """
-    Returns the free energy F for a specific kT 
-    1. Create the Hamiltonian for specific grid and V (potential)
-    2. Calculate eigenergies. Using np.linalg.eigvalsh since H is symmetric
-    3. Calculate F
-    """
-    H = H_create(grid, V)
-    E = np.linalg.eigvalsh(H)
-    return -kT * np.sum( np.log(1 + np.exp(-E/kT) ) )
 
-
+######################################
+# Monte Carlo / Metropolis algorithm
+######################################
 
 def update_grid_find_F(V, kT, grid, timesteps):
     """
+    Monte Carlo scheme based on the Metropolis algorithm
+    Returns the minimized free energy F and the corresponding grid/lattice
 
+    Uncommenting the "debugging lines" will create a plot showing the development of F for every step
     """
 
     # Flist = np.zeros(len(timesteps)) # Debugging
@@ -129,7 +154,8 @@ def update_grid_find_F(V, kT, grid, timesteps):
     Tlist = np.logspace(-1, 3, n_outer)
 
     for i in range(n_outer):
-        rand_compare_W = np.random.rand(n_inner)
+        # Random numbers to be compared with acceptance criterium 
+        rand_compare_W = np.random.rand(n_inner) # should probably be moved inside "if F > Fprev"
         for j in range(n_inner):
             oldgrid = grid.copy()
             grid = swap(grid)
@@ -150,10 +176,28 @@ def update_grid_find_F(V, kT, grid, timesteps):
                 # Swap back to old grid when condition is not met
                 grid = oldgrid
 
-    # DEBUG
+    ### DEBUG
     # plt.figure()
     # plt.plot(np.arange(timesteps), Flist, linestyle="", marker=".")
     return grid, F 
+
+
+
+
+
+
+
+###########
+# Enthalpy 
+###########
+
+def F_calc(grid, V, kT):
+    """
+    Returns the free energy F for a specific kT 
+    """
+    H = H_create(grid, V) # Create the Hamiltonian for specific grid and V (potential)
+    E = np.linalg.eigvalsh(H) # Calculate eigenergies. Using np.linalg.eigvalsh since H is symmetric
+    return -kT * np.sum( np.log(1 + np.exp(-E/kT) ) ) # Calculate F 
 
 
 
@@ -179,40 +223,65 @@ def enthalpy_start(a, kT):
 
     
 def enthalpy_problem(timesteps_init, xAlist, a, kT, speedup=False):
-    
+    """
+    Returns the minimized enthalpies and corresponding grids for each xA in xAlist
+    If speedup is true, then timesteps are moderated to save time 
+    """
+    ### Find neighbour potentials, F for only A atoms and F for only B atoms 
     V, FA, FB = enthalpy_start(a, kT)
 
+    ### Init
     N_xA = len(xAlist)
     Fs = np.zeros(N_xA)
     grids = np.zeros((N_xA, N*M))
     
     for i, xA in enumerate(xAlist):
+        ### Choose number of timesteps 
         if speedup:
-            timesteps = 100 + int(timesteps_init * 2*min(xA, (1-xA)))
+            timesteps = 100 + int(timesteps_init * 2*min(xA, (1-xA))) # Linear moderation
+            # timesteps = 100 + int(timesteps_init * 4*min(xA**2, (1-xA)**2)) # Square moderation
         else:
             timesteps = timesteps_init
+        
+        ### Create grid
         startgrid = grid_create(xA)
 
+        ### Find final grid and minimized free energy F
         grids[i], Fs[i] = update_grid_find_F(V, kT, startgrid, timesteps)
 
-        # Debugging
+        ### Debugging
         if speedup:
             print("xA", xA, "F", Fs[i], "timesteps", timesteps)
 
+    ### Find enthalpy
     Fdeltas = Fs - FA*xAlist - FB*(1-xAlist)
+
+    ### Save
     np.save("Fdeltas", Fdeltas)
 
     return Fdeltas, grids
 
 
+
+
+
+
+##############################
+# Convergence test functions
+##############################
+
 def error_benchmark(a, kT):
-
-    n_times = 10
-    timelist = 10000 * np.ones(n_times, dtype=int)
+    """
+    Do a few runs for x_A=0.5 and find the largest error
+    (Can be improved alot, but it is not the bottleneck of the convergence test at the time of writing this)
+    """
+    
+    n_times = 15
+    timesteps = 10000
     xA = np.array([0.5]) # Array because enthalpy_problem() requires a list
-    Fdeltas = np.zeros(n_times) 
 
-    for i, timesteps in enumerate(timelist):
+    Fdeltas = np.zeros(n_times) 
+    for i in range(n_times):
         Fdeltas[i], _ = enthalpy_problem(timesteps, xA, a, kT)
 
     maxerr = 0
@@ -228,6 +297,9 @@ def error_benchmark(a, kT):
 def error_finder(timesteps, max_error, xA, a, kT):
     """
     Only accept smaller error until enough steps have been taken
+    1. Find F
+    2. Calculate difference from previous F (absolute error)
+    3. If error > max_error return, otherwise continue until all iterations have passed and return
     """
     error = 0
     counter = 0
@@ -238,7 +310,6 @@ def error_finder(timesteps, max_error, xA, a, kT):
     while error < max_error and counter < iterations_to_pass:
         counter += 1
         Fdelta = enthalpy_problem(timesteps, np.array([xA]), a, kT)[0][0]
-        # print("Fdelta", Fdelta, "Fdelta_prev", Fdelta_prev)
         error = np.abs( (Fdelta - Fdelta_prev))
         Fdelta_prev = Fdelta
 
@@ -252,10 +323,13 @@ min_misses = 0 # See how many has failed on the lower end
 max_misses = 0 # --"-- higher end
 def find_necessary_timesteps(xA, max_error, a, kT):
     """
-    Finds the necessary Monte Carlo (time)steps needed 
-    to guarantee a smaller error than max_error for a particular xA-value
+    Finds the necessary Monte Carlo (time)steps to guarantee a smaller error than max_error for a particular xA-value
+    1. Increase timesteps until a error_finder() returns an error < max_error
+    2. Reduce timesteps until error_finder() returns an error > max_error
+    3. Return number of timesteps for the last run with error < max_error
+    Alt. Exit because of too few (avoid crash) or too many timesteps (avoid spending infinite time)
     """
-    ### Fetch globals to update
+    ### Fetch globals
     global min_misses
     global max_misses
 
@@ -297,16 +371,16 @@ def find_necessary_timesteps(xA, max_error, a, kT):
             timesteps = int(timesteps*1.5)
 
 
+
+
+
+
 ###########################
 # Functions called by main
 ###########################
-def snapshot():
+
+def snapshot(a=1.3, kT=0.1):
     timesteps = 20000
-
-    # a = 1.3 # Aangstroem
-    a = 0.9
-    kT = 0.5 # 1/beta
-
     xAlist = np.array([0.25, 0.5, 0.75])
 
     start = time()
@@ -325,22 +399,20 @@ def snapshot():
     plt.savefig("figures/snapshot_a09k05.pdf")
 
 
-def multirun():
+
+def multirun(a=1.3, kT=0.1):
+    ### Init
     timesteps = 20000
-
-    # a = 1.3 # Aangstroem
-    a = 0.9
-    kT = 0.95 # 1/beta
-
-    Nxa = 98
-    # Nxa = 32
+    Nxa = 98 # Number of xA-values
     xAlist = np.linspace(0.01, 0.99, Nxa)
 
+    ### Monte Carlo
     start = time()
     Fdeltas, _ = enthalpy_problem(timesteps, xAlist, a, kT, speedup=True)
     end = time()
     print("Multirun time", end-start)
 
+    ### Plot
     plt.figure()
     plt.plot(xAlist, Fdeltas)
     plt.title("Enthalpy for values: a = %1.1f, kT = %1.2f" % (a, kT))
@@ -351,29 +423,24 @@ def multirun():
 
 
 
-def convergence_data_miner():
+def convergence_data_miner(a=1.3, kT=0.1):
     """
+    Convergence test of this Monte Carlo program
     Runs through find_necessary_timesteps() for all xA.
-    a and kT can be varied for different plots
+    Creates a plot showing how necessary timesteps depends on xA
     """
-
-    ### Constants
-    # a = 1.3 # Aangstroem
-    a = 0.9
-    kT = 0.95 # 1/beta
 
     ### Max error
-    max_error = error_benchmark(a, kT)
+    max_error = error_benchmark(a, kT) # Benchmark error all other iterations must beat (have errors smaller than)
+    # max_error = 0.7 # Average result from earlier runs with a=1.3 and kT=0.1
     print(max_error)
-    # max_error = 0.7
-    # print("Max error:", max_error)
 
     ### Iteration settings
-    iterations = 98
-    timestep_list = np.zeros(iterations) 
-    xA_list = np.linspace(0.01, 0.99, iterations)
+    Nxa = 98
+    timestep_list = np.zeros(Nxa) 
+    xA_list = np.linspace(0.01, 0.99, Nxa)
     
-    ### Main event and timing
+    ### Main program and timing
     start = time()
     for i, xA in enumerate(xA_list):
         timesteps = find_necessary_timesteps(xA, max_error, a, kT)
@@ -385,7 +452,9 @@ def convergence_data_miner():
     
     ### Save
     astr = ("%1.1f" % a)
-    np.save("timesteps" + astr, timestep_list)
+    np.save("timesteps" + astr, timestep_list) # Save for later.. 
+
+    ### Load
     # timestep_list = np.load("timesteps.npy")
     # timestep_list = np.load("timesteps" + astr + ".npy")
     
@@ -401,15 +470,22 @@ def convergence_data_miner():
 
 
 
+
+
+####################
+####### MAIN #######
+####################
+
 if __name__ == "__main__":
+    ### Toggle comments to run the functions you want
 
-    ### A few runs to create snapshots, quick
-    # snapshot()
+    ### A few runs to create snapshots, quick < 1 min
+    snapshot(a=0.9, kT=0.95)
 
-    ### Many runs to create enthalpy as a function of xA, slow
-    multirun()
+    ### Many runs to create enthalpy as a function of xA, slow > 10 min
+    # multirun(a=0.9, kT=0.95)
 
-    ### Find necessary timesteps for different xA, extremely slow
+    ### Find necessary timesteps for different xA, extremely slow > 1 hour
     ### Needs some tweaking, doesn't always work right out of the box
     # convergence_data_miner()
 
