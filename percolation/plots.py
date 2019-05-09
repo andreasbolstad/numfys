@@ -108,7 +108,7 @@ if plot:
         y = data[i,:,0]
         plt.plot(x, y, label="N=%s" % int(nsites[i]**2))
     plt.legend()
-    plt.savefig("p_infty%d.pdf" % lattice_type)
+    plt.savefig("figures/p_infty%d.pdf" % lattice_type)
 
     # <s>
     plt.figure()
@@ -119,7 +119,7 @@ if plot:
         y = data[i,:,1]
         plt.plot(x,y, label="N=%s" % int(nsites[i]**2))
     plt.legend()
-    plt.savefig("s_avg%d.pdf" % lattice_type)
+    plt.savefig("figures/s_avg%d.pdf" % lattice_type)
 
     # chi
     plt.figure()
@@ -130,7 +130,7 @@ if plot:
         y = data[i,:,2]
         plt.plot(x,y, label="N=%s" % int(nsites[i]**2))
     plt.legend()
-    plt.savefig("chi%d.pdf" % lattice_type)
+    plt.savefig("figures/chi%d.pdf" % lattice_type)
     
     
 plt.show()

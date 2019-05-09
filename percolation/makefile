@@ -19,6 +19,7 @@ clean:
 	rm -f nodecreate percolate percolate_pic convolution
 	rm -f bonds.txt clusters.txt measurements.txt
 	rm -rf data
+	rm -rf figures
 
 nodecreate: nodecreate.f90
 	$(FC) $(FCFLAGS) nodecreate.f90 -o nodecreate

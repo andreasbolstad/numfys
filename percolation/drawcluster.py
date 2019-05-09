@@ -15,6 +15,6 @@ fig, axarr = plt.subplots(2,3)
 for i, c in enumerate(clusters):
     axarr[i//3, i%3].matshow(c)
 
-plt.savefig("cluster_drawing.pdf")
+plt.savefig("figures/cluster_drawing.pdf")
 
 plt.show()
